@@ -28,3 +28,5 @@ export interface HistorySeries {
 }
 export interface HistoricalProcesses { sampledAt: string; processes: ProcessReading[] }
 export interface AuthSession { authenticated: boolean; setupRequired: boolean }
+
+export interface ComputerSummary { deviceId: string; name: string; dataStatus: string; connectionStatus: string; sampledAt: string | null; lastHeartbeat: string | null; cpuPercent: number | null; memoryPercent: number | null }

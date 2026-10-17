@@ -3,6 +3,7 @@ import io
 import json
 import os
 from pathlib import Path
+from contextlib import closing
 import sqlite3
 import shutil
 import tarfile
@@ -40,6 +41,23 @@ class BackupTests(unittest.TestCase):
         self.assertEqual('replacement', result['database']['activeDevice'])
         self.assertEqual(7, result['database']['latest']['sequence'])
         self.assertEqual(manifest['files'], backup.files(os.path.join(self.destination, 'data')))
+
+    def test_multi_computer_restore_verifies_each_live_snapshot_and_credential_table(self):
+        with closing(sqlite3.connect(os.path.join(self.source, 'monitor.db'))) as connection:
+            connection.execute('CREATE TABLE computer_latest(device TEXT PRIMARY KEY,payload TEXT NOT NULL)')
+            connection.execute('CREATE TABLE computer_heartbeat(device TEXT PRIMARY KEY,payload TEXT NOT NULL)')
+            connection.execute('CREATE TABLE enrollment_devices(device TEXT PRIMARY KEY,hash TEXT NOT NULL)')
+            for device in ('replacement', 'second'):
+                sample = {'deviceId': device, 'sessionId': 'same-session', 'sequence': 12, 'sampledAt': '2026-10-17T11:00:00Z'}
+                connection.execute('INSERT INTO computer_latest VALUES(?,?)', (device, json.dumps(sample)))
+                connection.execute('INSERT INTO computer_heartbeat VALUES(?,?)', (device, '{}'))
+                connection.execute('INSERT INTO enrollment_devices VALUES(?,?)', (device, 'test-hash-' + device))
+            connection.commit()
+        backup.pack(self.source, self.archive, {})
+        report = backup.verify(self.archive, self.destination)['database']
+        self.assertEqual(12, report['latest']['sequence'])
+        self.assertEqual({'replacement', 'second'}, {item['deviceId'] for item in report['computerLatest']})
+        self.assertEqual(2, report['tables']['enrollment_devices'])
 
     def test_corrupt_archive_is_rejected_before_creating_restore_directory(self):
         backup.pack(self.source, self.archive, {})

@@ -67,6 +67,8 @@ try {
         if ($taskProxy -and $taskProxy.IsLoopback -and $taskProxy.AbsoluteUri -ne $taskRegistry) { $taskNpmArguments += @('--https-proxy', $taskProxy.AbsoluteUri) }
         & npm.cmd @taskNpmArguments
         if ($LASTEXITCODE -ne 0) { throw "npm ci 失败：$LASTEXITCODE" }
+        & npm.cmd test
+        if ($LASTEXITCODE -ne 0) { throw "网页状态测试失败：$LASTEXITCODE" }
         & npm.cmd run build
         if ($LASTEXITCODE -ne 0) { throw "网页构建失败：$LASTEXITCODE" }
     } finally { Pop-Location }

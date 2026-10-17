@@ -34,6 +34,14 @@ public sealed class NotificationStore
         // 已交付给外部服务的请求可能已成功；崩溃恢复不能自动重复发送。
         for (int i = 0; i < _data.Events.Count; i++)
             if (_data.Events[i].Status == "sending") _data.Events[i] = _data.Events[i] with { Status = "unknown", Detail = "服务在发送期间重启，结果未知，未自动重发。" };
+        if (_data.DeviceId is not null)
+        {
+            foreach (string id in _data.States.Keys.Where(value => Guid.TryParse(value, out _)).ToArray())
+            {
+                _data.States[StateKey(_data.DeviceId, id)] = _data.States[id]; _data.States.Remove(id);
+            }
+            _data.DeviceId = null;
+        }
         foreach (var state in _data.States.Values) { state.Since = null; state.LastSampledAt = null; }
         Save();
     }
@@ -88,10 +96,11 @@ public sealed class NotificationStore
         {
             if (device is null || !_data.Enabled) return;
             bool changed = false;
-            if (_data.DeviceId != device.DeviceId) { _data.DeviceId = device.DeviceId; _data.States.Clear(); CancelQueued("监控电脑已变更。"); changed = true; }
+            // 同一规则在每台电脑分别连续观察；遍历另一台不能清空状态或取消通知。
             foreach (var rule in _data.Rules.Where(value => value.Enabled))
             {
-                if (!_data.States.TryGetValue(rule.Id, out var state)) _data.States[rule.Id] = state = new();
+                string stateKey = StateKey(device.DeviceId, rule.Id);
+                if (!_data.States.TryGetValue(stateKey, out var state)) _data.States[stateKey] = state = new();
                 string? transition = AlertRules.Evaluate(rule, state, view, now, startedAt);
                 if (transition is not null) changed = true;
                 if (transition is null || (transition == "recovery" && !rule.NotifyRecovery)) continue;
@@ -153,6 +162,8 @@ public sealed class NotificationStore
             _data.Events[index] = _data.Events[index] with { Status = result.Status, Detail = result.Detail, SentAt = now }; Save();
         }
     }
+    private static string StateKey(string deviceId, string ruleId) => JsonSerializer.Serialize(new[] { deviceId, ruleId });
+
     private void CancelQueued(string reason)
     {
         for (int i = 0; i < _data.Events.Count; i++)

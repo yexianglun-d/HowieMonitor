@@ -1,6 +1,6 @@
 # Code signing policy
 
-Status, 2026-10-17: SignPath Foundation signing is being prepared. The project has not been approved, and there is no signed release yet. Merely having this policy, a CI workflow or an application does not establish a trusted signature.
+Status, 2026-10-17: The SignPath Foundation application has been submitted and is awaiting review. The project has not been approved, and there is no signed release yet. Merely having this policy, a CI workflow or an application does not establish a trusted signature.
 
 ## Requested provider and scope
 
@@ -14,7 +14,7 @@ Only artifacts built from this public repository on GitHub-hosted Windows runner
 
 Untrusted contributions require maintainer review. Signing is a manually requested workflow operation and also requires a SignPath approver to review the specific request. The signing workflow must run from the default branch; it does not sign arbitrary uploaded files. All maintainers with source or signing access must enable multi-factor authentication. Signing secrets belong in GitHub Actions secrets, never in source or release archives.
 
-Author and reviewer: [yexianglun-d](https://github.com/yexianglun-d), the repository owner. Proposed signing approver: the same maintainer; the corresponding SignPath account and approver role must be assigned after approval. No additional signing approver is currently authorized. GitHub and SignPath MFA must be enabled before signing; their enabled state has not yet been confirmed.
+Author and reviewer: [yexianglun-d](https://github.com/yexianglun-d), the repository owner. Proposed signing approver: the same maintainer; the corresponding SignPath account and approver role must be assigned after approval. No additional signing approver is currently authorized. GitHub MFA was confirmed enabled by the maintainer on 2026-10-17. The corresponding SignPath account and MFA have not yet been configured; both must be ready before signing.
 
 ## Release verification
 

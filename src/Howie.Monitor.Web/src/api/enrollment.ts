@@ -3,9 +3,9 @@ import type { EnrollmentCode, EnrollmentOverview, SetupDownload } from '../types
 
 export const getEnrollment = (signal: AbortSignal) => request<EnrollmentOverview>('/api/enrollment', { signal })
 export const getSetupDownload = (signal: AbortSignal) => request<SetupDownload>('/api/setup', { signal })
-export async function createEnrollmentCode(expectedDeviceId: string | null, confirmed: boolean, signal: AbortSignal) {
+export async function createEnrollmentCode(signal: AbortSignal) {
   await refreshCsrf()
-  return request<EnrollmentCode>('/api/enrollment/code', { method: 'POST', body: JSON.stringify({ expectedDeviceId, confirmReplacement: confirmed }), signal })
+  return request<EnrollmentCode>('/api/enrollment/code', { method: 'POST', body: JSON.stringify({ expectedDeviceId: null, confirmReplacement: false, addComputer: true }), signal })
 }
 export async function revokeEnrollmentCode(signal: AbortSignal) {
   await refreshCsrf()

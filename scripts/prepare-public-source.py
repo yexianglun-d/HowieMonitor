@@ -16,7 +16,7 @@ SCRIPTS = ['publish-monitor.ps1', 'start-local.ps1', 'stop-local.ps1',
 DIRECTORIES = ['src', 'tests', 'deploy', 'licenses', '.github/workflows']
 EXCLUDED = {'bin', 'obj', 'node_modules', 'wwwroot', '__pycache__', '.git',
             '.local', 'reports', 'artifacts', 'output', 'TestResults'}
-EXTENSIONS = {'.cs', '.csproj', '.json', '.manifest', '.html', '.ts', '.vue',
+EXTENSIONS = {'.cs', '.csproj', '.json', '.manifest', '.html', '.ts', '.mjs', '.vue',
               '.css', '.py', '.template', '.txt', '.xml', '.yml', '.yaml'}
 JSON_FILES = {'packages.lock.json', 'package.json', 'package-lock.json',
               'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json',

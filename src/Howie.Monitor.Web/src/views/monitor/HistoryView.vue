@@ -11,7 +11,7 @@ const { computers, selectedComputerId, selectedComputer, computerLoading, metric
   processes, selectedPoint, observedPoints, identity, loadComputers, selectPoint } = useHistory(() => props.deviceId)
 const formatDate = (value: string | null | undefined) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '—'
 function metricLabel(metric: HistoryMetric) {
-  if (selectedComputer.value?.isCurrent) return props.label(metric)
+  if (selectedComputer.value?.deviceId === props.deviceId) return props.label(metric)
   // 旧电脑没有完整硬件清单快照，使用当时保存的指标名称及设备标识，不能套用当前硬件型号。
   if (metric.deviceId === 'cpu/total') return `CPU 总览 · ${metric.name}`
   if (metric.deviceId === 'memory') return `物理内存 · ${metric.name}`
@@ -33,12 +33,12 @@ const tablePoints = computed(() => [...observedPoints.value].reverse())
 
 <template>
   <section class="panel history-controls">
-    <div class="history-field"><label for="history-computer">历史电脑</label><select id="history-computer" v-model="selectedComputerId" :disabled="computerLoading || !computers.length"><option v-for="computer in computers" :key="computer.deviceId" :value="computer.deviceId">{{ computer.name ?? '未记录名称' }} · {{ computer.isCurrent ? '当前电脑' : `历史电脑 · ${computer.deviceId.slice(-8)}` }}</option></select></div>
+    <div class="history-field"><label for="history-computer">历史电脑</label><select id="history-computer" v-model="selectedComputerId" :disabled="computerLoading || !computers.length"><option v-for="computer in computers" :key="computer.deviceId" :value="computer.deviceId">{{ computer.name ?? '未记录名称' }} · {{ computer.deviceId === props.deviceId ? '当前选择' : `历史电脑 · ${computer.deviceId.slice(-8)}` }}</option></select></div>
     <div class="history-field"><label for="history-metric">历史指标</label><select id="history-metric" v-model="selectedId" :disabled="catalogLoading || !metrics.length"><option v-for="metric in metrics" :key="identity(metric)" :value="identity(metric)">{{ metricLabel(metric) }} · {{ metric.unit }}</option></select></div>
     <div class="history-ranges" aria-label="历史时间范围"><button v-for="range in [{ hours: 1, label: '最近 1 小时' }, { hours: 24, label: '最近 24 小时' }, { hours: 168, label: '最近 7 天' }]" :key="range.hours" :class="{ active: hours === range.hours }" @click="hours = range.hours">{{ range.label }}</button></div>
     <button class="text-button" :disabled="loading || catalogLoading || computerLoading" @click="loadComputers">刷新查询 ↻</button>
   </section>
-  <p v-if="selectedComputer && !selectedComputer.isCurrent" class="state-banner" role="status">正在查看 {{ selectedComputer.name ?? '未记录名称的电脑' }} 的历史。保留期内记录：{{ formatDate(selectedComputer.firstSampleAt) }} — {{ formatDate(selectedComputer.lastSampleAt) }}；不代表该电脑当前仍在上报。</p>
+  <p v-if="selectedComputer && selectedComputer.deviceId !== props.deviceId" class="state-banner" role="status">正在查看 {{ selectedComputer.name ?? '未记录名称的电脑' }} 的历史。保留期内记录：{{ formatDate(selectedComputer.firstSampleAt) }} — {{ formatDate(selectedComputer.lastSampleAt) }}；不代表该电脑当前仍在上报。</p>
   <p v-if="error" class="error-banner" role="alert">{{ error }}</p>
   <p v-if="computerLoading || catalogLoading || loading" class="empty-state" role="status">正在查询历史数据…</p>
   <p v-else-if="!metrics.length && !error" class="panel empty-state">尚无历史记录，接入后会随真实采样持续积累。</p>

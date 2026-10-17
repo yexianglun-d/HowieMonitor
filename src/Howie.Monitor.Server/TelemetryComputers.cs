@@ -14,14 +14,14 @@ public sealed partial class TelemetryStore
         lock (_gate)
         {
             using var db = Open(); using var command = db.CreateCommand();
-            var current = ReadJson<DeviceRegistration>(db, "SELECT registration FROM device LIMIT 1");
+            var current = Registration(db);
             command.CommandText = """
                 WITH retained AS (
                     SELECT device,min(CASE WHEN time_valid=1 THEN sampled END) AS first,
                         max(CASE WHEN time_valid=1 THEN sampled END) AS last
                     FROM history_samples WHERE sampled>=$from AND sampled<=$to GROUP BY device
                 ), computers AS (
-                    SELECT device FROM retained UNION SELECT $current WHERE $current<>''
+                    SELECT device FROM retained UNION SELECT id FROM device
                 )
                 SELECT c.device,n.name,c.device=$current,r.first,r.last FROM computers c
                 LEFT JOIN history_computers n ON n.device=c.device LEFT JOIN retained r ON r.device=c.device
@@ -42,9 +42,9 @@ public sealed partial class TelemetryStore
         lock (_gate)
         {
             using var db = Open();
-            string current = ReadJson<DeviceRegistration>(db, "SELECT registration FROM device LIMIT 1")?.DeviceId ?? "";
+            string current = Registration(db)?.DeviceId ?? "";
             if (computerId is null) return current;
-            if (computerId == current && current.Length > 0) return current;
+            if (Registration(db, computerId) is not null) return computerId;
             using var command = db.CreateCommand();
             command.CommandText = "SELECT 1 FROM history_samples WHERE device=$device AND sampled>=$from AND sampled<=$to LIMIT 1";
             command.Parameters.AddWithValue("$device", computerId);

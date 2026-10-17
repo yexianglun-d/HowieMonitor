@@ -1,12 +1,13 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import * as api from '../api/monitor'
 import { ApiError } from '../api/request'
-import type { Device, Latest, Metric, HistoryPoint } from '../types/monitor'
+import type { ComputerSummary, Device, Latest, Metric, HistoryPoint } from '../types/monitor'
 
 export function useMonitor() {
   const authenticated = ref(false), setupRequired = ref(false), initializing = ref(true), busy = ref(false)
   const connectionError = ref(''), authError = ref(''), device = ref<Device | null>(null), latest = ref<Latest | null>(null)
   const error = computed(() => authError.value || connectionError.value)
+  const computers = ref<ComputerSummary[]>([]), selectedComputerId = ref('')
   const history = ref<Record<string, HistoryPoint[]>>({}), activeMetric = ref<Metric | null>(null), now = ref(Date.now())
   let timer: ReturnType<typeof setTimeout> | undefined, clock: ReturnType<typeof setInterval> | undefined
   let controller: AbortController | null = null, generation = 0, serverFetchedAt = 0
@@ -19,7 +20,7 @@ export function useMonitor() {
     if (latest.value.dataStatus === 'stale' || age > 30) return 'stale'
     return age > 10 ? 'delayed' : 'fresh'
   })
-  const connectionStatus = computed(() => latest.value?.lastHeartbeat && effectiveNow.value - Date.parse(latest.value.lastHeartbeat) <= 30000 ? 'online' : 'disconnected')
+  const connectionStatus = computed(() => latest.value?.connectionStatus === 'online' && latest.value.lastHeartbeat && effectiveNow.value - Date.parse(latest.value.lastHeartbeat) <= 30000 ? 'online' : 'disconnected')
   const find = (key: string) => metrics.value.find(metric => metric.key === key) ?? null
   const cpu = computed(() => find('cpu.usage'))
   const memory = computed(() => find('memory.usage'))
@@ -28,23 +29,35 @@ export function useMonitor() {
   const highlights = computed(() => [cpu.value, gpu.value, memory.value, disk.value])
 
   function stop() { generation++; clearTimeout(timer); controller?.abort(); controller = null }
+  function clearComputer() { device.value = null; latest.value = null; history.value = {}; activeMetric.value = null }
+  function selectComputer(id: string) {
+    if (id === selectedComputerId.value || !computers.value.some(computer => computer.deviceId === id)) return
+    // 切换先取消并清空旧快照，迟到响应由 generation 拒绝，避免混入另一台电脑的值。
+    stop(); selectedComputerId.value = id; clearComputer(); connectionError.value = ''; void poll()
+  }
   async function poll() {
     if (!authenticated.value) return
     const currentGeneration = generation
-    controller = new AbortController()
+    const requestController = new AbortController(); controller = requestController
     try {
-      const [newDevice, newLatest] = await Promise.all([api.getDevice(controller.signal), api.getLatest(controller.signal)])
+      const result = await api.getComputers(requestController.signal)
+      if (currentGeneration !== generation) return
+      computers.value = result
+      const computerId = result.some(computer => computer.deviceId === selectedComputerId.value) ? selectedComputerId.value : result[0]?.deviceId ?? ''
+      if (computerId !== selectedComputerId.value) { selectedComputerId.value = computerId; clearComputer() }
+      if (!computerId) { clearComputer(); connectionError.value = ''; return }
+      const [newDevice, newLatest] = await Promise.all([api.getDevice(computerId, requestController.signal), api.getLatest(computerId, requestController.signal)])
       if (currentGeneration !== generation) return
       device.value = newDevice; latest.value = newLatest; serverFetchedAt = Date.now(); connectionError.value = ''
       const tracked = [...highlights.value, activeMetric.value].filter((metric): metric is Metric => metric !== null)
       for (const metric of tracked) {
-        const points = await api.getHistory(metric.key, metric.deviceId, metric.unit, controller.signal)
+        const points = await api.getHistory(computerId, metric.key, metric.deviceId, metric.unit, requestController.signal)
         if (currentGeneration !== generation) return
         history.value[`${metric.deviceId}:${metric.key}`] = points
       }
     } catch (err) {
       if (currentGeneration !== generation || (err instanceof DOMException && err.name === 'AbortError')) return
-      if (err instanceof ApiError && err.status === 401) { authenticated.value = false; latest.value = null; device.value = null }
+      if (err instanceof ApiError && err.status === 401) { authenticated.value = false; computers.value = []; selectedComputerId.value = ''; clearComputer() }
       connectionError.value = err instanceof Error ? err.message : '无法连接监控服务。'
     } finally {
       if (currentGeneration === generation && authenticated.value) timer = setTimeout(poll, document.hidden ? 10000 : 2000)
@@ -58,7 +71,7 @@ export function useMonitor() {
   }
   async function signOut() {
     busy.value = true; authError.value = ''
-    try { await api.logout(); stop(); authenticated.value = false; latest.value = null; device.value = null; history.value = {} }
+    try { await api.logout(); stop(); authenticated.value = false; computers.value = []; selectedComputerId.value = ''; clearComputer(); history.value = {} }
     catch (err) { authError.value = err instanceof Error ? err.message : '退出失败，请重试。' }
     finally { busy.value = false }
   }
@@ -71,5 +84,5 @@ export function useMonitor() {
     finally { initializing.value = false }
   })
   onUnmounted(() => { stop(); clearInterval(clock); document.removeEventListener('visibilitychange', visibility) })
-  return { authenticated, setupRequired, initializing, busy, error, device, latest, metrics, history, activeMetric, dataStatus, connectionStatus, cpu, gpu, memory, disk, signIn, signOut, find }
+  return { computers, selectedComputerId, selectComputer, authenticated, setupRequired, initializing, busy, error, device, latest, metrics, history, activeMetric, dataStatus, connectionStatus, cpu, gpu, memory, disk, signIn, signOut, find }
 }

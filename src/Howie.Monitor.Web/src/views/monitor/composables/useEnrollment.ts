@@ -4,14 +4,14 @@ import type { EnrollmentCode, EnrollmentOverview, SetupDownload } from '../../..
 
 export function useEnrollment() {
   const overview = ref<EnrollmentOverview | null>(null), download = ref<SetupDownload | null>(null), code = ref<EnrollmentCode | null>(null)
-  const loading = ref(true), busy = ref(false), confirmed = ref(false), error = ref(''), message = ref('')
+  const loading = ref(true), busy = ref(false), error = ref(''), message = ref('')
   const controller = new AbortController(); let disposed = false, revision = 0, timer: ReturnType<typeof setTimeout> | undefined
   async function refresh() {
     const current = revision
     try {
       const [state, packageInfo] = await Promise.all([api.getEnrollment(controller.signal), api.getSetupDownload(controller.signal)])
       if (disposed || current !== revision || busy.value) return
-      if (overview.value?.currentDeviceId !== state.currentDeviceId) { confirmed.value = false; code.value = null }
+      if (overview.value?.currentDeviceId !== state.currentDeviceId) code.value = null
       if (code.value && code.value.expiresAt !== state.codeExpiresAt) code.value = null
       overview.value = state; download.value = packageInfo; error.value = ''
     } catch (err) { if (!disposed && current === revision && !busy.value) error.value = err instanceof Error ? err.message : '无法读取接入信息。' }
@@ -21,7 +21,7 @@ export function useEnrollment() {
     if (busy.value || !overview.value) return
     revision++; busy.value = true; error.value = ''; message.value = ''
     try {
-      const value = await api.createEnrollmentCode(overview.value.currentDeviceId, confirmed.value, controller.signal)
+      const value = await api.createEnrollmentCode(controller.signal)
       if (!disposed) { code.value = value; overview.value.codeExpiresAt = value.expiresAt; message.value = '绑定码已生成，请在被监控电脑的向导中输入。' }
     } catch (err) { if (!disposed) error.value = err instanceof Error ? err.message : '生成失败。' }
     finally { if (!disposed) { busy.value = false; void refresh() } }
@@ -35,5 +35,5 @@ export function useEnrollment() {
   }
   void refresh()
   onUnmounted(() => { disposed = true; clearTimeout(timer); controller.abort(); code.value = null })
-  return { overview, download, code, loading, busy, confirmed, error, message, refresh, generate, revoke }
+  return { overview, download, code, loading, busy, error, message, refresh, generate, revoke }
 }

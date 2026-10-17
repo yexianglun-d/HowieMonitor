@@ -150,6 +150,40 @@ public sealed class NotificationTests : IDisposable
         Assert.NotNull(store.Update(new(true, 5, null, false, [rule with { RecoveryThreshold = 95 }])));
     }
 
+    [Fact] public void InterleavedComputersKeepIndependentContinuityAndQueuedEvents()
+    {
+        var store = Store(); Configure(store, Rule);
+        for (int sequence = 0; sequence <= 2; sequence++)
+        {
+            int seconds = sequence * 2;
+            Evaluate(store, seconds, sequence);
+            var other = View(sequence, seconds);
+            store.Evaluate(Device with { DeviceId = "other", Name = "second-computer" },
+                other with { Sample = other.Sample! with { DeviceId = "other" } }, _now.AddSeconds(seconds), _now, PublicUrl);
+        }
+        var events = store.View(_now).Events;
+        Assert.Equal(2, events.Count); Assert.All(events, item => Assert.Equal("queued", item.Status));
+        Assert.Contains(events, item => item.Description.Contains("second-computer", StringComparison.Ordinal));
+        Assert.Contains(events, item => item.Description.Contains("电脑：computer\n", StringComparison.Ordinal));
+        store = Store(); Assert.Equal(2, store.View(_now).Events.Count);
+        Assert.NotNull(store.BeginSend(_now.AddSeconds(5))); Assert.Null(store.BeginSend(_now.AddSeconds(6)));
+    }
+
+    [Fact] public void AnotherComputersSamplesCannotCompleteOrRecoverThisComputersRule()
+    {
+        var store = Store(); Configure(store, Rule); Evaluate(store, 0, 0); Evaluate(store, 2, 1);
+        var other = View(2, 4);
+        store.Evaluate(Device with { DeviceId = "other" }, other with { Sample = other.Sample! with { DeviceId = "other" } }, _now.AddSeconds(4), _now, PublicUrl);
+        Assert.Empty(store.View(_now).Events);
+        Evaluate(store, 4, 2); Assert.Single(store.View(_now).Events);
+        for (int sequence = 3; sequence <= 5; sequence++)
+        {
+            var low = View(sequence, sequence * 2, 50);
+            store.Evaluate(Device with { DeviceId = "other" }, low with { Sample = low.Sample! with { DeviceId = "other" } }, _now.AddSeconds(sequence * 2), _now, PublicUrl);
+        }
+        Assert.Single(store.View(_now).Events);
+    }
+
     [Theory] [InlineData("{\"code\":0}", "accepted")] [InlineData("{\"code\":40001}", "failed")]
     [InlineData("invalid", "unknown")] [InlineData("{}", "unknown")] [InlineData("[]", "unknown")] [InlineData("{\"code\":\"0\"}", "unknown")]
     public async Task OfficialProtocolAcceptsOnlyCodeZeroAndNeverEchoesProviderText(string response, string status)

@@ -51,9 +51,18 @@ def database_report(directory):
     try:
         if connection.execute('PRAGMA integrity_check').fetchone()[0] != 'ok': raise ValueError('Database integrity check failed')
         result = {'tables': {table: connection.execute('SELECT count(*) FROM ' + table).fetchone()[0] for table in TABLES}}
-        row = connection.execute('SELECT payload FROM latest WHERE id=1').fetchone()
-        result['latest'] = None if row is None else {key: json.loads(row[0])[key] for key in ('deviceId', 'sessionId', 'sequence', 'sampledAt')}
         result['activeDevice'] = connection.execute('SELECT device FROM enrollment_active WHERE id=1').fetchone()[0]
+        available = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        multi = ('computer_latest', 'computer_heartbeat', 'enrollment_devices')
+        if any(table in available for table in multi):
+            if not all(table in available for table in multi): raise ValueError('Incomplete multi-computer schema')
+            for table in multi: result['tables'][table] = connection.execute('SELECT count(*) FROM ' + table).fetchone()[0]
+            rows = connection.execute('SELECT payload FROM computer_latest ORDER BY device').fetchall()
+            result['computerLatest'] = [{key: json.loads(row[0])[key] for key in ('deviceId', 'sessionId', 'sequence', 'sampledAt')} for row in rows]
+            result['latest'] = next((item for item in result['computerLatest'] if item['deviceId'] == result['activeDevice']), None)
+        else:
+            row = connection.execute('SELECT payload FROM latest WHERE id=1').fetchone()
+            result['latest'] = None if row is None else {key: json.loads(row[0])[key] for key in ('deviceId', 'sessionId', 'sequence', 'sampledAt')}
         return result
     finally: connection.close()
 

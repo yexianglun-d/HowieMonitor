@@ -13,11 +13,12 @@ public sealed class NotificationWorker(NotificationStore notifications, Telemetr
             try
             {
                 var now = DateTimeOffset.UtcNow;
-                var device = telemetry.Device();
-                var view = telemetry.Latest(now);
-                // 设备切换后的旧快照不能参与新设备规则。
-                if (view.Sample?.DeviceId != device?.DeviceId && view.Sample is not null) view = view with { DataStatus = "stale" };
-                notifications.Evaluate(device, view, now, started, publicUrl);
+                foreach (var computer in telemetry.Computers(now))
+                {
+                    var device = telemetry.Device(computer.DeviceId);
+                    var view = telemetry.Latest(now, computer.DeviceId);
+                    notifications.Evaluate(device, view, now, started, publicUrl);
+                }
                 var dispatch = notifications.BeginSend(now);
                 if (dispatch is null) continue;
                 var result = await sender.Send(dispatch, stoppingToken);

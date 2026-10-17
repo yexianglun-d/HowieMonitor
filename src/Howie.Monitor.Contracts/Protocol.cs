@@ -23,6 +23,8 @@ public sealed record HistoryPoint(DateTimeOffset SampledAt, double? Value);
 public sealed record HistoryMetric(string Key, string DeviceId, string Name, string Unit);
 public sealed record HistoryComputer(string DeviceId, string? Name, bool IsCurrent,
     DateTimeOffset? FirstSampleAt, DateTimeOffset? LastSampleAt);
+public sealed record ComputerSummary(string DeviceId, string Name, string DataStatus, string ConnectionStatus,
+    DateTimeOffset? SampledAt, DateTimeOffset? LastHeartbeat, double? CpuPercent, double? MemoryPercent);
 public sealed record HistoryBucketPoint(DateTimeOffset SampledAt, double? Value, double? Minimum, double? Maximum,
     long ValidSamples, long TotalSamples, double CoverageSeconds, DateTimeOffset? FirstSampleAt,
     DateTimeOffset? LastSampleAt, DateTimeOffset? PeakAt, SampleIdentity? Peak);

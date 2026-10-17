@@ -1,10 +1,11 @@
 import { request, refreshCsrf } from './request'
-import type { AuthSession, Device, Latest, HistoryPoint, HistoryMetric, HistoryComputer, HistorySeries, HistoricalProcesses, SampleIdentity } from '../types/monitor'
+import type { AuthSession, ComputerSummary, Device, Latest, HistoryPoint, HistoryMetric, HistoryComputer, HistorySeries, HistoricalProcesses, SampleIdentity } from '../types/monitor'
 
 export const getSession = () => request<AuthSession>('/api/auth/session')
-export const getDevice = (signal: AbortSignal) => request<Device | null>('/api/device', { signal })
-export const getLatest = (signal: AbortSignal) => request<Latest>('/api/metrics/latest', { signal })
-export const getHistory = (key: string, deviceId: string, unit: string, signal: AbortSignal) => request<HistoryPoint[]>(`/api/history?${new URLSearchParams({ key, deviceId, unit, minutes: '10' })}`, { signal })
+export const getComputers = (signal: AbortSignal) => request<ComputerSummary[]>('/api/computers', { signal })
+export const getDevice = (computerId: string, signal: AbortSignal) => request<Device | null>(`/api/device?${new URLSearchParams({ computerId })}`, { signal })
+export const getLatest = (computerId: string, signal: AbortSignal) => request<Latest>(`/api/metrics/latest?${new URLSearchParams({ computerId })}`, { signal })
+export const getHistory = (computerId: string, key: string, deviceId: string, unit: string, signal: AbortSignal) => request<HistoryPoint[]>(`/api/history?${new URLSearchParams({ computerId, key, deviceId, unit, minutes: '10' })}`, { signal })
 export const getHistoryComputers = (signal: AbortSignal) => request<HistoryComputer[]>('/api/history/computers', { signal })
 export const getHistoryMetrics = (computerId: string, signal: AbortSignal) => request<HistoryMetric[]>(`/api/history/metrics?${new URLSearchParams({ computerId })}`, { signal })
 export const getHistorySeries = (computerId: string, metric: HistoryMetric, hours: number, signal: AbortSignal) =>

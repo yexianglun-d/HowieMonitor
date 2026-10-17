@@ -1,6 +1,6 @@
 namespace Howie.Monitor.Contracts;
 
-public sealed record EnrollmentCodeRequest(bool ConfirmReplacement, string? ExpectedDeviceId);
+public sealed record EnrollmentCodeRequest(bool ConfirmReplacement, string? ExpectedDeviceId, bool AddComputer = false);
 public sealed record EnrollmentCode(string Code, DateTimeOffset ExpiresAt, string? PreviousComputerName);
 public sealed record EnrollmentClaim(string Code, string RequestId, string ComputerName,
     string? ExistingDeviceId = null, string? ExistingToken = null);

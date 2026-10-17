@@ -171,15 +171,32 @@ viewing.MapPost("/notifications/test", (NotificationStore store) =>
     string? error = store.QueueTest(DateTimeOffset.UtcNow, (hosting.PublicUrl ?? hosting.ListenUrl).AbsoluteUri);
     return error is null ? Results.Ok(store.View(DateTimeOffset.UtcNow)) : Results.BadRequest(new { error });
 }).AddEndpointFilter(Csrf);
-viewing.MapGet("/device", (TelemetryStore store) => Results.Ok(store.Device()));
-viewing.MapGet("/metrics/latest", (TelemetryStore store) => Results.Ok(store.Latest(DateTimeOffset.UtcNow)));
-viewing.MapGet("/processes", (TelemetryStore store) => Results.Ok(store.Latest(DateTimeOffset.UtcNow).Sample?.Processes ?? []));
-viewing.MapGet("/history", (string key, string deviceId, string? unit, int? minutes, TelemetryStore store) =>
+viewing.MapGet("/computers", (TelemetryStore store) => Results.Ok(store.Computers(DateTimeOffset.UtcNow)));
+viewing.MapGet("/device", (string? computerId, TelemetryStore store) =>
 {
-    if (key.Length > 200 || deviceId.Length > 200 || unit?.Length > 20 || (minutes ?? 10) is < 1 or > 60)
+    if (!ValidComputerId(computerId)) return Results.BadRequest(new { error = "电脑标识不正确。" });
+    var device = store.Device(computerId);
+    return computerId is not null && device is null ? Results.NotFound(new { error = "电脑尚未接入。" }) : Results.Ok(device);
+});
+viewing.MapGet("/metrics/latest", (string? computerId, TelemetryStore store) =>
+{
+    if (!ValidComputerId(computerId)) return Results.BadRequest(new { error = "电脑标识不正确。" });
+    return computerId is not null && store.Device(computerId) is null ? Results.NotFound(new { error = "电脑尚未接入。" })
+        : Results.Ok(store.Latest(DateTimeOffset.UtcNow, computerId));
+});
+viewing.MapGet("/processes", (string? computerId, TelemetryStore store) =>
+{
+    if (!ValidComputerId(computerId)) return Results.BadRequest(new { error = "电脑标识不正确。" });
+    return computerId is not null && store.Device(computerId) is null ? Results.NotFound(new { error = "电脑尚未接入。" })
+        : Results.Ok(store.Latest(DateTimeOffset.UtcNow, computerId).Sample?.Processes ?? []);
+});
+viewing.MapGet("/history", (string key, string deviceId, string? unit, int? minutes, string? computerId, TelemetryStore store) =>
+{
+    if (key.Length > 200 || deviceId.Length > 200 || unit?.Length > 20 || (minutes ?? 10) is < 1 or > 60 || !ValidComputerId(computerId))
         return Results.BadRequest(new { error = "近期曲线支持 1–60 分钟，指标与设备标识需有效。" });
+    if (computerId is not null && store.Device(computerId) is null) return Results.NotFound(new { error = "电脑尚未接入。" });
     var now = DateTimeOffset.UtcNow;
-    return Results.Ok(store.History(key, deviceId, now.AddMinutes(-(minutes ?? 10)), now, unit));
+    return Results.Ok(store.History(key, deviceId, now.AddMinutes(-(minutes ?? 10)), now, unit, computerId));
 });
 viewing.MapGet("/history/computers", (TelemetryStore store) => Results.Ok(store.HistoryComputers(DateTimeOffset.UtcNow)));
 viewing.MapGet("/history/metrics", (string? computerId, TelemetryStore store) =>

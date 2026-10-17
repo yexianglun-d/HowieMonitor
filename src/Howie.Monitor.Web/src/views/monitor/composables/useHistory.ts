@@ -25,7 +25,9 @@ export function useHistory(owner: () => string | undefined) {
       if (current !== computerGeneration) return
       computers.value = result
       const previous = selectedComputerId.value
+      const preferred = owner()
       selectedComputerId.value = result.some(computer => computer.deviceId === previous) ? previous
+        : result.some(computer => computer.deviceId === preferred) ? preferred!
         : (result.find(computer => computer.isCurrent) ?? result[0])?.deviceId ?? ''
       if (previous === selectedComputerId.value) await loadCatalog()
     } catch (err) {

@@ -21,6 +21,7 @@ public sealed class PendingEnrollment
     public DateTimeOffset? ExpiresAt { get; set; }
     public bool PreservesHistory { get; set; }
     public string State { get; set; } = "code";
+    public bool AddComputer { get; set; }
     public DeviceRegistration? Registration { get; set; }
     public Heartbeat? Heartbeat { get; set; }
     public DateTimeOffset? HeartbeatReceived { get; set; }
@@ -44,6 +45,14 @@ public sealed partial class TelemetryStore
                 """);
             Execute(db, null, "INSERT OR IGNORE INTO enrollment_active VALUES(1,$device,$hash)",
                 ("$device", initial.DeviceId), ("$hash", SecretHash(initial.Token)));
+            using var transaction = db.BeginTransaction();
+            Execute(db, transaction, """
+                CREATE TABLE IF NOT EXISTS enrollment_devices(device TEXT PRIMARY KEY,hash TEXT NOT NULL UNIQUE);
+                INSERT OR IGNORE INTO enrollment_devices SELECT device,hash FROM enrollment_active
+                    WHERE NOT EXISTS(SELECT 1 FROM history_metadata WHERE name='multi-credentials-v1');
+                INSERT OR IGNORE INTO history_metadata VALUES('multi-credentials-v1','complete');
+                """);
+            transaction.Commit();
             _enrollmentProtector = protector;
         }
     }
@@ -53,14 +62,16 @@ public sealed partial class TelemetryStore
         lock (_gate)
         {
             using var db = Open();
-            var device = ReadJson<DeviceRegistration>(db, "SELECT registration FROM device LIMIT 1");
-            if (device is not null && (!request.ConfirmReplacement || request.ExpectedDeviceId != device.DeviceId))
+            if (request.AddComputer && request.ConfirmReplacement) return (null, "新增与替换不能同时选择。");
+            var device = Registration(db);
+            if (!request.AddComputer && device is not null && (!request.ConfirmReplacement || request.ExpectedDeviceId != device.DeviceId))
                 return (null, "请确认当前电脑及接入/更换操作，再生成绑定码。");
             string code = Convert.ToHexString(RandomNumberGenerator.GetBytes(6));
             var pending = new PendingEnrollment { CodeHash = SecretHash(code), CodeExpiresAt = now.AddMinutes(10),
-                ExpectedDeviceId = ActiveDevice(db), PreviousComputerName = device?.Name };
+                AddComputer = request.AddComputer, ExpectedDeviceId = request.AddComputer ? "" : ActiveDevice(db),
+                PreviousComputerName = request.AddComputer ? null : device?.Name };
             SavePending(db, null, pending);
-            return (new(code.Insert(8, "-").Insert(4, "-"), pending.CodeExpiresAt, device?.Name), null);
+            return (new(code.Insert(8, "-").Insert(4, "-"), pending.CodeExpiresAt, pending.PreviousComputerName), null);
         }
     }
     public void RevokeEnrollment() { lock (_gate) { using var db = Open(); Execute(db, null, "DELETE FROM enrollment_pending"); } }
@@ -76,7 +87,7 @@ public sealed partial class TelemetryStore
             var pending = Pending(db);
             string code = claim.Code.Replace("-", "", StringComparison.Ordinal).Trim().ToUpperInvariant();
             if (pending is null || !SameHash(pending.CodeHash, SecretHash(code))) return (null, "绑定码无效或已撤销，请重新生成。");
-            if (pending.ExpectedDeviceId != ActiveDevice(db) && pending.State != "activated") return (null, "当前监控电脑已变更，请重新生成绑定码。");
+            if (!pending.AddComputer && pending.ExpectedDeviceId != ActiveDevice(db) && pending.State != "activated") return (null, "当前监控电脑已变更，请重新生成绑定码。");
             if (pending.RequestId is not null)
             {
                 if (pending.RequestId != claim.RequestId || pending.ComputerName != claim.ComputerName) return (null, "绑定码已由另一安装请求使用。");
@@ -90,9 +101,11 @@ public sealed partial class TelemetryStore
             {
                 var actor = Authorize(db, "Bearer " + claim.ExistingToken, now);
                 if (actor is null || actor.Candidate || actor.DeviceId != claim.ExistingDeviceId
-                    || !string.Equals(claim.ComputerName, pending.PreviousComputerName, StringComparison.OrdinalIgnoreCase))
+                    || !string.Equals(claim.ComputerName, Registration(db, actor.DeviceId)?.Name, StringComparison.OrdinalIgnoreCase)
+                    || (!pending.AddComputer && actor.DeviceId != pending.ExpectedDeviceId))
                     return (null, "已有配置与当前电脑不一致，不能按原设备接管。");
                 deviceId = actor.DeviceId;
+                pending.PreviousComputerName = Registration(db, actor.DeviceId)!.Name;
             }
             string token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48));
             pending.RequestId = claim.RequestId; pending.ComputerName = claim.ComputerName; pending.DeviceId = deviceId;
@@ -141,13 +154,13 @@ public sealed partial class TelemetryStore
             using var db = Open(); var actor = Authorize(db, authorization, now);
             if (actor is null) return (false, null);
             var pending = actor.Candidate ? Pending(db) : null;
-            var registration = pending?.Registration ?? (actor.Candidate ? null : ReadJson<DeviceRegistration>(db, "SELECT registration FROM device LIMIT 1"));
+            var registration = pending?.Registration ?? (actor.Candidate ? null : Registration(db, actor.DeviceId));
             if (registration is null || beat.DeviceId != actor.DeviceId || beat.SessionId != registration.SessionId || beat.BootId != registration.BootId
                 || beat.QueueLength < 0 || beat.DroppedSamples < 0 || beat.LastSequence < 0 || beat.LastError?.Length > 512)
                 return (true, "心跳信息不正确或采集会话未注册。");
             if (pending is not null) { pending.Heartbeat = beat; pending.HeartbeatReceived = now; SavePending(db, null, pending); }
-            else Execute(db, null, "INSERT INTO heartbeat VALUES(1,$now,$json) ON CONFLICT(id) DO UPDATE SET received=$now,payload=$json",
-                ("$now", now.ToUnixTimeMilliseconds()), ("$json", JsonSerializer.Serialize(beat, ProtocolJson.Options)));
+            else Execute(db, null, "INSERT INTO computer_heartbeat VALUES($device,$now,$json) ON CONFLICT(device) DO UPDATE SET received=$now,payload=$json",
+                ("$device", actor.DeviceId), ("$now", now.ToUnixTimeMilliseconds()), ("$json", JsonSerializer.Serialize(beat, ProtocolJson.Options)));
             return (true, null);
         }
     }
@@ -192,7 +205,7 @@ public sealed partial class TelemetryStore
     {
         lock (_gate)
         {
-            using var db = Open(); var device = ReadJson<DeviceRegistration>(db, "SELECT registration FROM device LIMIT 1"); var pending = Pending(db);
+            using var db = Open(); var device = Registration(db); var pending = Pending(db);
             return new(device?.DeviceId, device?.Name, pending is null ? null : pending.State == "activated"
                 ? ActiveProgress(db, pending.DeviceId!, now) : Progress(pending, now), pending?.CodeExpiresAt);
         }
@@ -209,13 +222,20 @@ public sealed partial class TelemetryStore
                 return (true, "接入请求身份不正确。", null);
             if (!actor.Candidate && pending.State == "activated") return (true, null, ActiveProgress(db, actor.DeviceId, now));
             if (!actor.Candidate || Progress(pending, now).State != "ready") return (true, "安装接入尚未收到新鲜的 CPU、内存和心跳，不能激活。", null);
-            if (pending.ExpectedDeviceId != ActiveDevice(db)) return (true, "当前电脑已变更，请重新绑定。", null);
+            if (!pending.AddComputer && pending.ExpectedDeviceId != ActiveDevice(db)) return (true, "当前电脑已变更，请重新绑定。", null);
             using var transaction = db.BeginTransaction();
-            Execute(db, transaction, "UPDATE enrollment_active SET device=$device,hash=$hash WHERE id=1", ("$device", pending.DeviceId!), ("$hash", pending.TokenHash!));
-            Execute(db, transaction, "DELETE FROM device; DELETE FROM latest; DELETE FROM heartbeat;");
-            Execute(db, transaction, "INSERT INTO device VALUES($id,$json)", ("$id", pending.DeviceId!), ("$json", JsonSerializer.Serialize(pending.Registration, ProtocolJson.Options)));
+            if (!pending.AddComputer)
+            {
+                Execute(db, transaction, "UPDATE enrollment_active SET device=$device,hash=$hash WHERE id=1", ("$device", pending.DeviceId!), ("$hash", pending.TokenHash!));
+                Execute(db, transaction, "DELETE FROM enrollment_devices WHERE device=$old; DELETE FROM device WHERE id=$old; DELETE FROM computer_latest WHERE device=$old; DELETE FROM computer_heartbeat WHERE device=$old;",
+                    ("$old", pending.ExpectedDeviceId));
+            }
+            // 新增和同设备接管只写本机凭据及状态，不撤销其他电脑。
+            Execute(db, transaction, "INSERT INTO enrollment_devices VALUES($device,$hash) ON CONFLICT(device) DO UPDATE SET hash=$hash",
+                ("$device", pending.DeviceId!), ("$hash", pending.TokenHash!));
+            Execute(db, transaction, "INSERT INTO device VALUES($id,$json) ON CONFLICT(id) DO UPDATE SET registration=$json", ("$id", pending.DeviceId!), ("$json", JsonSerializer.Serialize(pending.Registration, ProtocolJson.Options)));
             RememberHistoryComputer(db, transaction, pending.Registration!);
-            Execute(db, transaction, "INSERT INTO heartbeat VALUES(1,$now,$json)", ("$now", pending.HeartbeatReceived!.Value.ToUnixTimeMilliseconds()),
+            Execute(db, transaction, "INSERT INTO computer_heartbeat VALUES($device,$now,$json) ON CONFLICT(device) DO UPDATE SET received=$now,payload=$json", ("$device", pending.DeviceId!), ("$now", pending.HeartbeatReceived!.Value.ToUnixTimeMilliseconds()),
                 ("$json", JsonSerializer.Serialize(pending.Heartbeat, ProtocolJson.Options)));
             IngestCore(db, transaction, new(false, [pending.Sample!]), pending.SampleReceived!.Value);
             pending.State = "activated"; pending.Registration = null; pending.Sample = null; pending.Heartbeat = null;
@@ -239,9 +259,10 @@ public sealed partial class TelemetryStore
     {
         if (authorization is null || !authorization.StartsWith("Bearer ", StringComparison.Ordinal) || authorization.Length > 519) return null;
         string hash = SecretHash(authorization[7..]);
-        using var command = db.CreateCommand(); command.CommandText = "SELECT device,hash FROM enrollment_active WHERE id=1";
+        using var command = db.CreateCommand(); command.CommandText = "SELECT device,hash FROM enrollment_devices";
         using var reader = command.ExecuteReader();
-        if (reader.Read() && SameHash(reader.GetString(1), hash)) return new(reader.GetString(0), false);
+        while (reader.Read())
+            if (SameHash(reader.GetString(1), hash)) return new(reader.GetString(0), false);
         reader.Close();
         var pending = Pending(db);
         return pending is { State: "claimed", DeviceId: not null, TokenHash: not null } && pending.ExpiresAt > now
@@ -262,9 +283,7 @@ public sealed partial class TelemetryStore
     }
     private static EnrollmentProgress ActiveProgress(SqliteConnection db, string deviceId, DateTimeOffset now)
     {
-        var device = ReadJson<DeviceRegistration>(db, "SELECT registration FROM device LIMIT 1"); var sample = ReadJson<TelemetrySample>(db, "SELECT payload FROM latest WHERE id=1");
-        long? beat = ScalarLong(db, "SELECT received FROM heartbeat WHERE id=1");
-        return new("active", device?.Name, device?.DeviceId == deviceId, beat.HasValue && now.ToUnixTimeMilliseconds() - beat.Value <= 30000,
-            sample?.DeviceId == deviceId ? DataStatus(sample, device?.SessionId, now) : "waiting", sample?.DeviceId == deviceId ? sample.SampledAt : null, null);
+        var device = Registration(db, deviceId); var view = ReadLatest(db, deviceId, now);
+        return new("active", device?.Name, device is not null, view.ConnectionStatus == "online", view.DataStatus, view.Sample?.SampledAt, null);
     }
 }

@@ -26,6 +26,7 @@ public sealed partial class TelemetryStore
             """;
         command.ExecuteNonQuery();
         InitializeHistory(db);
+        InitializeLiveComputers(db);
     }
 
     public void Register(DeviceRegistration registration)
@@ -39,17 +40,17 @@ public sealed partial class TelemetryStore
             RememberHistoryComputer(db, transaction, registration); transaction.Commit();
         }
     }
-    public DeviceRegistration? Device()
+    public DeviceRegistration? Device(string? computerId = null)
     {
-        lock (_gate) { using var db = Open(); return ReadJson<DeviceRegistration>(db, "SELECT registration FROM device LIMIT 1"); }
+        lock (_gate) { using var db = Open(); return Registration(db, computerId); }
     }
     public void Beat(Heartbeat heartbeat, DateTimeOffset now)
     {
         lock (_gate)
         {
             using var db = Open();
-            Execute(db, null, "INSERT INTO heartbeat VALUES(1,$now,$json) ON CONFLICT(id) DO UPDATE SET received=$now,payload=$json",
-                ("$now", now.ToUnixTimeMilliseconds()), ("$json", JsonSerializer.Serialize(heartbeat, ProtocolJson.Options)));
+            Execute(db, null, "INSERT INTO computer_heartbeat VALUES($device,$now,$json) ON CONFLICT(device) DO UPDATE SET received=$now,payload=$json",
+                ("$device", heartbeat.DeviceId), ("$now", now.ToUnixTimeMilliseconds()), ("$json", JsonSerializer.Serialize(heartbeat, ProtocolJson.Options)));
         }
     }
 
@@ -68,26 +69,26 @@ public sealed partial class TelemetryStore
     private static IngestAcknowledgement IngestCore(SqliteConnection db, SqliteTransaction transaction,
         IngestRequest request, DateTimeOffset now)
     {
-            var registration = ReadJson<DeviceRegistration>(db, "SELECT registration FROM device LIMIT 1", transaction);
             using var historyWriter = new HistoryWriter(db, transaction, now);
             List<SampleIdentity> accepted = [];
             foreach (var sample in request.Samples)
             {
+                var registration = Registration(db, sample.DeviceId, transaction);
                 // 历史只保存主要进程；完整进程列表保留在最新快照。
                 var top = TopProcesses(sample.Processes);
                 bool inserted = historyWriter.Add(sample, top, sample.SampledAt <= now.AddSeconds(5));
                 if (inserted && sample.SampledAt >= now.AddHours(-1))
-                    Execute(db, transaction, "INSERT OR IGNORE INTO samples VALUES($session,$sequence,$time,$json)",
-                        ("$session", sample.SessionId), ("$sequence", sample.Sequence), ("$time", sample.SampledAt.ToUnixTimeMilliseconds()),
+                    Execute(db, transaction, "INSERT OR IGNORE INTO samples VALUES($device,$session,$sequence,$time,$json)",
+                        ("$device", sample.DeviceId), ("$session", sample.SessionId), ("$sequence", sample.Sequence), ("$time", sample.SampledAt.ToUnixTimeMilliseconds()),
                         ("$json", JsonSerializer.Serialize(sample with { Processes = top }, ProtocolJson.Options)));
                 // 最新观测按当前会话和递增序号选择；新鲜度单独判断，首次时钟异常也必须可见。
                 if (inserted && !request.Backfill && registration?.SessionId == sample.SessionId)
                 {
                     Execute(db, transaction, """
-                        INSERT INTO latest VALUES(1,$session,$sequence,$received,$json)
-                        ON CONFLICT(id) DO UPDATE SET session=$session,sequence=$sequence,received=$received,payload=$json
-                        WHERE latest.session<>$session OR latest.sequence<$sequence
-                        """, ("$session", sample.SessionId), ("$sequence", sample.Sequence),
+                        INSERT INTO computer_latest VALUES($device,$session,$sequence,$received,$json)
+                        ON CONFLICT(device) DO UPDATE SET session=$session,sequence=$sequence,received=$received,payload=$json
+                        WHERE computer_latest.session<>$session OR computer_latest.sequence<$sequence
+                        """, ("$device", sample.DeviceId), ("$session", sample.SessionId), ("$sequence", sample.Sequence),
                         ("$received", now.ToUnixTimeMilliseconds()), ("$json", JsonSerializer.Serialize(sample, ProtocolJson.Options)));
                 }
                 accepted.Add(new(sample.SessionId, sample.Sequence));
@@ -98,20 +99,12 @@ public sealed partial class TelemetryStore
             return new(accepted);
     }
 
-    public LatestView Latest(DateTimeOffset now)
+    public LatestView Latest(DateTimeOffset now, string? computerId = null)
     {
         lock (_gate)
         {
             using var db = Open();
-            var sample = ReadJson<TelemetrySample>(db, "SELECT payload FROM latest WHERE id=1");
-            var beat = ReadJson<Heartbeat>(db, "SELECT payload FROM heartbeat WHERE id=1");
-            long? received = ScalarLong(db, "SELECT received FROM latest WHERE id=1");
-            long? heartbeatAt = ScalarLong(db, "SELECT received FROM heartbeat WHERE id=1");
-            var device = ReadJson<DeviceRegistration>(db, "SELECT registration FROM device LIMIT 1");
-            string status = DataStatus(sample, device?.SessionId, now);
-            return new(sample, now, received.HasValue ? DateTimeOffset.FromUnixTimeMilliseconds(received.Value) : null,
-                heartbeatAt.HasValue ? DateTimeOffset.FromUnixTimeMilliseconds(heartbeatAt.Value) : null, status,
-                heartbeatAt.HasValue && now.ToUnixTimeMilliseconds() - heartbeatAt.Value <= 30000 ? "online" : "disconnected", beat);
+            return ReadLatest(db, computerId, now);
         }
     }
 
@@ -124,13 +117,13 @@ public sealed partial class TelemetryStore
         return age > 10 ? "delayed" : "fresh";
     }
 
-    public IReadOnlyList<HistoryPoint> History(string key, string deviceId, DateTimeOffset from, DateTimeOffset now, string? unit = null)
+    public IReadOnlyList<HistoryPoint> History(string key, string deviceId, DateTimeOffset from, DateTimeOffset now, string? unit = null, string? computerId = null)
     {
         lock (_gate)
         {
             using var db = Open();
             using var command = db.CreateCommand();
-            string? owner = ReadJson<DeviceRegistration>(db, "SELECT registration FROM device LIMIT 1")?.DeviceId;
+            string? owner = Registration(db, computerId)?.DeviceId;
             command.CommandText = """
                 SELECT h.sampled,v.value FROM history_samples h LEFT JOIN history_values v
                     ON h.device=v.device AND h.session=v.session AND h.sequence=v.sequence
@@ -163,15 +156,17 @@ public sealed partial class TelemetryStore
         foreach (var arg in args) command.Parameters.AddWithValue(arg.Name, arg.Value);
         return command.ExecuteNonQuery();
     }
-    private static T? ReadJson<T>(SqliteConnection db, string sql, SqliteTransaction? transaction = null)
+    private static T? ReadJson<T>(SqliteConnection db, string sql, SqliteTransaction? transaction = null, params (string Name, object Value)[] args)
     {
         using var command = db.CreateCommand(); command.Transaction = transaction; command.CommandText = sql;
+        foreach (var arg in args) command.Parameters.AddWithValue(arg.Name, arg.Value);
         var value = command.ExecuteScalar();
         return value is string json ? JsonSerializer.Deserialize<T>(json, ProtocolJson.Options) : default;
     }
-    private static long? ScalarLong(SqliteConnection db, string sql)
+    private static long? ScalarLong(SqliteConnection db, string sql, params (string Name, object Value)[] args)
     {
         using var command = db.CreateCommand(); command.CommandText = sql;
+        foreach (var arg in args) command.Parameters.AddWithValue(arg.Name, arg.Value);
         return command.ExecuteScalar() is long value ? value : null;
     }
 }

@@ -27,6 +27,7 @@ const date = (value: string) => new Date(value).toLocaleString('zh-CN', { hour12
 </script>
 
 <template>
+  <p class="state-banner">通知设置应用于所有接入电脑，触发与恢复分别判断，发送预算共用。硬件专属指标仅在对应指标可读的电脑上生效。</p>
   <p v-if="loading" class="panel empty-state" role="status">正在读取通知设置…</p>
   <section v-else-if="!ready" class="panel notification-panel"><p class="error-message" role="alert">{{ error || '通知设置尚未读取，请重试。' }}</p><button class="text-button" @click="refresh">重新读取 ↻</button></section>
   <template v-else>
