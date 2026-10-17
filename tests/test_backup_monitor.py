@@ -16,7 +16,9 @@ backup = importlib.util.module_from_spec(spec); spec.loader.exec_module(backup)
 
 class BackupTests(unittest.TestCase):
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory(prefix='howie-backup-tests-'); self.root = self.temporary.name
+        self.temporary = tempfile.TemporaryDirectory(prefix='howie-backup-tests-')
+        # Windows 托管环境可能返回 8.3 临时目录名；测试须满足生产工具的规范路径前置条件。
+        self.root = os.path.realpath(self.temporary.name)
         self.source = os.path.join(self.root, 'source'); os.mkdir(self.source)
         connection = sqlite3.connect(os.path.join(self.source, 'monitor.db'))
         for table in backup.TABLES:
