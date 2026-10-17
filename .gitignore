@@ -1,0 +1,15 @@
+**/bin/
+**/obj/
+.vs/
+.idea/
+artifacts/
+reports/
+TestResults/
+.local/
+**/node_modules/
+src/Howie.Monitor.Server/wwwroot/
+output/
+*.tsbuildinfo
+*.user
+*.suo
+**/__pycache__/

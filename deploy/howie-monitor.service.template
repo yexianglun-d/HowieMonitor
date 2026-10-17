@@ -1,0 +1,23 @@
+[Unit]
+Description=Howie Monitor Server
+After=network.target
+
+[Service]
+Type=simple
+User=howie-monitor
+Group=howie-monitor
+WorkingDirectory=/opt/howie-monitor/current
+ExecStart=/opt/howie-monitor/current/Howie.Monitor.Server --server-url http://127.0.0.1:5080 --public-url https://__DOMAIN__ --data-dir /var/lib/howie-monitor
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/howie-monitor
+SyslogIdentifier=howie-monitor
+
+[Install]
+WantedBy=multi-user.target

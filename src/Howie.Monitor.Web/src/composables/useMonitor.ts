@@ -1,0 +1,75 @@
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import * as api from '../api/monitor'
+import { ApiError } from '../api/request'
+import type { Device, Latest, Metric, HistoryPoint } from '../types/monitor'
+
+export function useMonitor() {
+  const authenticated = ref(false), setupRequired = ref(false), initializing = ref(true), busy = ref(false)
+  const connectionError = ref(''), authError = ref(''), device = ref<Device | null>(null), latest = ref<Latest | null>(null)
+  const error = computed(() => authError.value || connectionError.value)
+  const history = ref<Record<string, HistoryPoint[]>>({}), activeMetric = ref<Metric | null>(null), now = ref(Date.now())
+  let timer: ReturnType<typeof setTimeout> | undefined, clock: ReturnType<typeof setInterval> | undefined
+  let controller: AbortController | null = null, generation = 0, serverFetchedAt = 0
+  const metrics = computed(() => latest.value?.sample?.metrics ?? [])
+  const effectiveNow = computed(() => latest.value ? Date.parse(latest.value.serverNow) + now.value - serverFetchedAt : now.value)
+  const dataStatus = computed(() => {
+    if (!latest.value?.sample) return 'waiting'
+    if (latest.value.dataStatus === 'clockError') return 'clockError'
+    const age = (effectiveNow.value - Date.parse(latest.value.sample.sampledAt)) / 1000
+    if (latest.value.dataStatus === 'stale' || age > 30) return 'stale'
+    return age > 10 ? 'delayed' : 'fresh'
+  })
+  const connectionStatus = computed(() => latest.value?.lastHeartbeat && effectiveNow.value - Date.parse(latest.value.lastHeartbeat) <= 30000 ? 'online' : 'disconnected')
+  const find = (key: string) => metrics.value.find(metric => metric.key === key) ?? null
+  const cpu = computed(() => find('cpu.usage'))
+  const memory = computed(() => find('memory.usage'))
+  const disk = computed(() => find('disk.activity'))
+  const gpu = computed(() => metrics.value.find(metric => metric.deviceId.startsWith('sensor/Gpu') && metric.unit === '%' && ['D3D 3D', 'GPU Core'].includes(metric.name)) ?? null)
+  const highlights = computed(() => [cpu.value, gpu.value, memory.value, disk.value])
+
+  function stop() { generation++; clearTimeout(timer); controller?.abort(); controller = null }
+  async function poll() {
+    if (!authenticated.value) return
+    const currentGeneration = generation
+    controller = new AbortController()
+    try {
+      const [newDevice, newLatest] = await Promise.all([api.getDevice(controller.signal), api.getLatest(controller.signal)])
+      if (currentGeneration !== generation) return
+      device.value = newDevice; latest.value = newLatest; serverFetchedAt = Date.now(); connectionError.value = ''
+      const tracked = [...highlights.value, activeMetric.value].filter((metric): metric is Metric => metric !== null)
+      for (const metric of tracked) {
+        const points = await api.getHistory(metric.key, metric.deviceId, metric.unit, controller.signal)
+        if (currentGeneration !== generation) return
+        history.value[`${metric.deviceId}:${metric.key}`] = points
+      }
+    } catch (err) {
+      if (currentGeneration !== generation || (err instanceof DOMException && err.name === 'AbortError')) return
+      if (err instanceof ApiError && err.status === 401) { authenticated.value = false; latest.value = null; device.value = null }
+      connectionError.value = err instanceof Error ? err.message : '无法连接监控服务。'
+    } finally {
+      if (currentGeneration === generation && authenticated.value) timer = setTimeout(poll, document.hidden ? 10000 : 2000)
+    }
+  }
+  async function signIn(password: string) {
+    busy.value = true; authError.value = ''
+    try { await api.login(password, setupRequired.value); authenticated.value = true; setupRequired.value = false; stop(); await poll() }
+    catch (err) { authError.value = err instanceof Error ? err.message : '登录失败。' }
+    finally { busy.value = false }
+  }
+  async function signOut() {
+    busy.value = true; authError.value = ''
+    try { await api.logout(); stop(); authenticated.value = false; latest.value = null; device.value = null; history.value = {} }
+    catch (err) { authError.value = err instanceof Error ? err.message : '退出失败，请重试。' }
+    finally { busy.value = false }
+  }
+  function visibility() { if (authenticated.value) { stop(); void poll() } }
+  onMounted(async () => {
+    clock = setInterval(() => { now.value = Date.now() }, 1000)
+    document.addEventListener('visibilitychange', visibility)
+    try { const session = await api.getSession(); authenticated.value = session.authenticated; setupRequired.value = session.setupRequired; if (authenticated.value) await poll() }
+    catch (err) { connectionError.value = err instanceof Error ? err.message : '服务暂不可用。' }
+    finally { initializing.value = false }
+  })
+  onUnmounted(() => { stop(); clearInterval(clock); document.removeEventListener('visibilitychange', visibility) })
+  return { authenticated, setupRequired, initializing, busy, error, device, latest, metrics, history, activeMetric, dataStatus, connectionStatus, cpu, gpu, memory, disk, signIn, signOut, find }
+}

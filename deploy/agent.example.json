@@ -1,0 +1,7 @@
+{
+  "serverUrl": "https://monitor.howied.me",
+  "deviceId": "REPLACE_WITH_SERVER_DEVICE_ID",
+  "token": "REPLACE_WITH_SERVER_DEVICE_TOKEN",
+  "dataDirectory": "REPLACE_WITH_PRIVATE_ABSOLUTE_DATA_DIRECTORY",
+  "localDevelopment": false
+}

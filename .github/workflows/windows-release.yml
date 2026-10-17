@@ -1,0 +1,108 @@
+name: Windows installer and SignPath
+
+on:
+  workflow_dispatch:
+    inputs:
+      request_signing:
+        description: Request signing after SignPath Foundation approval and configuration
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: windows-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  installer:
+    runs-on: windows-2025
+    timeout-minutes: 120
+    steps:
+      - name: Check out the public source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Select the locked .NET SDK
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          global-json-file: global.json
+      - name: Select Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - name: Check signing prerequisites
+        if: ${{ inputs.request_signing }}
+        shell: pwsh
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+        run: |
+          if ($env:GITHUB_REF -ne ('refs/heads/' + $env:DEFAULT_BRANCH)) { throw 'Signing requires the default branch.' }
+          foreach ($name in @('SIGNPATH_API_TOKEN', 'SIGNPATH_ORGANIZATION_ID', 'SIGNPATH_PROJECT_SLUG', 'SIGNPATH_SIGNING_POLICY_SLUG')) {
+            if (-not [Environment]::GetEnvironmentVariable($name)) { throw "Missing approved SignPath configuration: $name" }
+          }
+      - name: Restore, build and test
+        shell: pwsh
+        run: |
+          dotnet restore Howie.Monitor.slnx --locked-mode
+          if ($LASTEXITCODE -ne 0) { throw 'Restore failed.' }
+          dotnet build Howie.Monitor.slnx -c Release --no-restore
+          if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
+          dotnet test Howie.Monitor.slnx -c Release --no-build --no-restore
+          if ($LASTEXITCODE -ne 0) { throw 'Tests failed.' }
+          python -m unittest discover -s tests -p 'test_*.py'
+          if ($LASTEXITCODE -ne 0) { throw 'Python tests failed.' }
+      - name: Build the unsigned installer
+        shell: pwsh
+        run: |
+          $packages = @(./scripts/publish-monitor.ps1 -PublicRelease)
+          $setup = @($packages | Where-Object { $_.Platform -eq 'Windows Setup' })
+          if ($setup.Count -ne 1) { throw 'Expected exactly one setup result.' }
+          $inputDirectory = Join-Path $PWD 'artifacts/signing-input'
+          New-Item -ItemType Directory -Path $inputDirectory | Out-Null
+          Copy-Item -LiteralPath $setup[0].Archive -Destination (Join-Path $inputDirectory 'HowieMonitorSetup.exe')
+          "Source revision: $env:GITHUB_SHA`nUnsigned installer: $($setup[0].Sha256)" >> $env:GITHUB_STEP_SUMMARY
+      - name: Upload the exact unsigned artifact
+        id: unsigned
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: howie-monitor-unsigned-${{ github.run_id }}
+          path: artifacts/signing-input/HowieMonitorSetup.exe
+          if-no-files-found: error
+          retention-days: 14
+      - name: Submit the GitHub artifact for manual SignPath approval
+        if: ${{ inputs.request_signing }}
+        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 5400
+          output-artifact-directory: artifacts/signing-output
+          parameters: |
+            version: "0.1.0"
+      - name: Verify the returned signed installer
+        if: ${{ inputs.request_signing }}
+        shell: pwsh
+        run: |
+          ./scripts/verify-signed-setup.ps1 -UnsignedSetup artifacts/signing-input/HowieMonitorSetup.exe -SignedSetup artifacts/signing-output/HowieMonitorSetup.exe
+      - name: Upload the verified signed artifact
+        if: ${{ inputs.request_signing }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: howie-monitor-signed-${{ github.run_id }}
+          path: |
+            artifacts/signing-output/HowieMonitorSetup.exe
+            artifacts/signing-output/HowieMonitorSetup.exe.sha256
+          if-no-files-found: error
+          retention-days: 14

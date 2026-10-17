@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Howie.Monitor.Agent/Howie.Monitor.Agent.csproj" />
+    <Project Path="src/Howie.Monitor.Collector/Howie.Monitor.Collector.csproj" />
+    <Project Path="src/Howie.Monitor.Contracts/Howie.Monitor.Contracts.csproj" />
+    <Project Path="src/Howie.Monitor.Probe/Howie.Monitor.Probe.csproj" />
+    <Project Path="src/Howie.Monitor.Server/Howie.Monitor.Server.csproj" />
+    <Project Path="src/Howie.Monitor.Setup/Howie.Monitor.Setup.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Howie.Monitor.Collector.Tests/Howie.Monitor.Collector.Tests.csproj" />
+    <Project Path="tests/Howie.Monitor.Server.Tests/Howie.Monitor.Server.Tests.csproj" />
+  </Folder>
+</Solution>

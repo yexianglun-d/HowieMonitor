@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWindowsForms>true</UseWindowsForms>
+    <Version>0.1.0</Version><AssemblyName>HowieMonitorSetup</AssemblyName><ApplicationManifest>app.manifest</ApplicationManifest>
+    <Product>Howie Monitor</Product><Company>Howie Monitor contributors</Company>
+    <Copyright>Copyright (c) 2026 Howie Monitor contributors</Copyright>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <RuntimeFrameworkVersion Condition="'$(SelfContained)' == 'true'">10.0.12</RuntimeFrameworkVersion>
+    <PublishSingleFile Condition="'$(SelfContained)' == 'true'">true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract><EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <PublishTrimmed>false</PublishTrimmed>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" Version="10.0.12" PrivateAssets="all" />
+    <PackageReference Include="System.Management" Version="10.0.12" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.12" />
+    <ProjectReference Include="../Howie.Monitor.Contracts/Howie.Monitor.Contracts.csproj" />
+    <EmbeddedResource Include="$(SetupPayload)" LogicalName="Howie.Monitor.Setup.Agent.zip" Condition="'$(SetupPayload)' != ''" />
+    <EmbeddedResource Include="$(SetupNotices)" LogicalName="Howie.Monitor.Setup.Notices.zip" Condition="'$(SetupNotices)' != ''" />
+    <AssemblyMetadata Include="AgentPayloadSha256" Value="$(SetupPayloadHash)" />
+    <EmbeddedResource Include="../../PRIVACY.md" LogicalName="Howie.Monitor.Setup.Privacy.md" />
+  </ItemGroup>
+</Project>

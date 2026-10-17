@@ -1,0 +1,4 @@
+SHELL=/bin/sh
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+CRON_TZ=Asia/Shanghai
+30 3 * * * root /usr/bin/python3 /opt/howie-monitor/backup-monitor.py backup > /opt/howie-monitor/backups/last-run.log 2>&1

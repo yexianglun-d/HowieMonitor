@@ -1,0 +1,27 @@
+# 替换占位符，确认宝塔现有站点后再安装；不要直接覆盖已有域名配置。
+server {
+    listen 80;
+    server_name __DOMAIN__;
+    location ^~ /.well-known/acme-challenge/ { root __ACME_ROOT__; }
+    location / { return 301 https://__DOMAIN__$request_uri; }
+}
+
+server {
+    listen 443 ssl;
+    server_name __DOMAIN__;
+    ssl_certificate __CERTIFICATE__;
+    ssl_certificate_key __PRIVATE_KEY__;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    client_max_body_size 1m;
+
+    location = /health/live { return 404; }
+    location / {
+        proxy_pass http://127.0.0.1:5080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_read_timeout 15s;
+    }
+}
