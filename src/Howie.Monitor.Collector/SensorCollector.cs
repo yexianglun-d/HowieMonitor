@@ -1,5 +1,7 @@
 using LibreHardwareMonitor.Hardware;
 using Howie.Monitor.Contracts;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Howie.Monitor.Collector;
 
@@ -100,7 +102,7 @@ public sealed class SensorCollector : IDisposable
             }
 
             string source = $"LibreHardwareMonitorLib 0.9.6: {hardware.Name}/{sensor.SensorType}";
-            string key = $"{id}/{sensor.SensorType}/{sensor.Index}";
+            string key = MetricKey(id, sensor.SensorType, sensor.Index, sensor.Name);
             // Intel 核显功耗同样来自 CPU MSR，驱动失效时硬件库可能给出零值。
             bool driverRequired = RequiresPawnIo(hardware.HardwareType, sensor.SensorType);
             if (!updated)
@@ -133,6 +135,10 @@ public sealed class SensorCollector : IDisposable
 
     private static bool IsGpu(HardwareType type) =>
         type is HardwareType.GpuNvidia or HardwareType.GpuAmd or HardwareType.GpuIntel;
+
+    public static string MetricKey(string hardwareId, SensorType type, int index, string name) =>
+        // 同一硬件的不同传感器可能复用类型和序号；名称摘要保证顺序变化时仍对应同一指标。
+        $"{hardwareId}/{type}/{index}/{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(name)))[..24]}";
 
     public static bool RequiresPawnIo(HardwareType hardwareType, SensorType sensorType) =>
         hardwareType == HardwareType.Cpu

@@ -38,7 +38,7 @@ const date = (value: string) => new Date(value).toLocaleString('zh-CN', { hour12
         <div class="panel-heading"><div><h2>微信通知</h2><p>Server酱 Turbo · 保存后生效</p></div><label class="check-label"><input v-model="settings.enabled" type="checkbox">通知总开关</label></div>
         <p class="footnote">开启后，连续满足规则才发送一次；恢复提醒单独控制。缺失或过期数据不作为恢复。</p>
         <div class="notification-fields">
-          <label>SendKey <span class="muted">{{ settings.hasCredential ? '已配置，留空保留' : '尚未配置' }}</span><input v-model="sendKey" type="password" autocomplete="new-password" maxlength="203" placeholder="SCT 开头的 SendKey" :disabled="clearCredential"></label>
+          <label>SendKey<input v-model="sendKey" type="password" autocomplete="new-password" maxlength="203" placeholder="SCT 开头的 SendKey" :disabled="clearCredential"><small>{{ settings.hasCredential ? '已配置，留空保留' : '尚未配置' }}</small></label>
           <label>每日请求预算<input v-model.number="settings.dailyLimit" type="number" min="1" max="1000" required><small>北京时间 {{ budgetDate }} · 已请求 {{ requestsToday }} 次（测试与失败也计入）</small></label>
         </div>
         <div class="notification-actions"><a href="https://sct.ftqq.com/" target="_blank" rel="noopener noreferrer">获取 SendKey ↗</a><label class="check-label"><input v-model="clearCredential" type="checkbox" @change="sendKey = ''">清除已存密钥</label><button type="button" class="text-button" :disabled="busy || !settings.hasCredential || !!sendKey || clearCredential" @click="test">发送测试通知 ↗</button></div>

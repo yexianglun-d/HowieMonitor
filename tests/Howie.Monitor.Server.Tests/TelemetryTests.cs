@@ -1,6 +1,8 @@
 using Howie.Monitor.Server;
 using Howie.Monitor.Agent;
 using Howie.Monitor.Contracts;
+using Howie.Monitor.Collector;
+using LibreHardwareMonitor.Hardware;
 using Xunit;
 
 namespace Howie.Monitor.Server.Tests;
@@ -70,6 +72,43 @@ public sealed class TelemetryTests : IDisposable
         var queue = new AgentQueue(Path.Combine(_directory,"agent")); queue.Add(Sample(1)); queue.Add(Sample(2));
         Assert.Equal(2,new AgentQueue(Path.Combine(_directory,"agent")).State().Count);
         queue.Acknowledge(new([new(_session,1)])); Assert.Equal(1,queue.State().Count); Assert.Equal(2,queue.Latest()!.Sequence);
+    }
+    private static MetricReading NvidiaLoad(string name, double value, bool legacy = false) => MetricReading.Present(
+        legacy ? "sensor/GpuNvidia/1/Load/3" : SensorCollector.MetricKey("sensor/GpuNvidia/1", SensorType.Load, 3, name),
+        "sensor/GpuNvidia/1", name, value, "%", "LibreHardwareMonitorLib 0.9.6: NVIDIA GeForce GTX 1660 SUPER/Load");
+
+    [Fact] public void DistinctNvidiaLoadReadingsPassValidationAndRetainSeparateHistory()
+    {
+        var legacy = Sample(1) with { Metrics = [NvidiaLoad("GPU Bus", 12, true), NvidiaLoad("GPU Memory", 45, true)] };
+        Assert.Equal("样本包含重复指标。", TelemetryValidation.Validate(new(false, [legacy]), "device", _now));
+        var sample = legacy with { Metrics = [NvidiaLoad("GPU Bus", 12), NvidiaLoad("GPU Memory", 45)] };
+        Assert.Null(TelemetryValidation.Validate(new(false, [sample]), "device", _now));
+        _store.Ingest(new(false, [sample]), _now);
+        foreach (var metric in sample.Metrics)
+            Assert.Equal(metric.Value, Assert.Single(_store.History(metric.Key, metric.DeviceId, _now.AddSeconds(-1), _now.AddSeconds(1))).Value);
+    }
+
+    [Fact] public void ExistingQueueMigratesLegacySensorKeysWithoutDroppingSamples()
+    {
+        string directory = Path.Combine(_directory, "legacy-agent");
+        var queue = new AgentQueue(directory);
+        var legacy = Sample(1, _now.AddSeconds(-20)) with { Metrics = [NvidiaLoad("GPU Bus", 12, true), NvidiaLoad("GPU Memory", 45, true)] };
+        queue.Add(legacy);
+        using (var db = new Microsoft.Data.Sqlite.SqliteConnection(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = Path.Combine(directory, "queue.db") }.ToString()))
+        {
+            db.Open(); using var command = db.CreateCommand(); command.CommandText = "PRAGMA user_version=0"; command.ExecuteNonQuery();
+        }
+        var migrated = new AgentQueue(directory);
+        var sample = Assert.Single(migrated.Backlog(_now.AddSeconds(-5)));
+        Assert.Null(TelemetryValidation.Validate(new(true, [sample]), "device", _now));
+        Assert.Equal(legacy.SessionId, sample.SessionId); Assert.Equal(legacy.Sequence, sample.Sequence); Assert.Equal(legacy.SampledAt, sample.SampledAt);
+        Assert.Equal(legacy.Metrics.Select(value => value.Name), sample.Metrics.Select(value => value.Name));
+        Assert.Equal(legacy.Metrics.Select(value => value.Value), sample.Metrics.Select(value => value.Value));
+        Assert.Equal(NvidiaLoad("GPU Bus", 12).Key, sample.Metrics[0].Key);
+        Assert.Equal(NvidiaLoad("GPU Memory", 45).Key, sample.Metrics[1].Key);
+        Assert.Equal(1, migrated.State().Count); Assert.Equal(0, migrated.State().Dropped);
+        Assert.Equal(sample.Metrics, new AgentQueue(directory).Latest()!.Metrics);
+        migrated.Acknowledge(new([new(sample.SessionId, sample.Sequence)])); Assert.Equal(0, migrated.State().Count);
     }
     [Fact] public void ExpiredQueueRecordsLossWithoutLosingCurrent()
     {

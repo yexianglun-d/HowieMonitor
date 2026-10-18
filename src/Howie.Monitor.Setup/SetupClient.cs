@@ -6,8 +6,10 @@ namespace Howie.Monitor.Setup;
 
 public sealed class SetupClient : IDisposable
 {
-    private readonly HttpClient _client = new(new HttpClientHandler { AllowAutoRedirect = false })
-    { BaseAddress = new(SetupPaths.ServerUrl), Timeout = TimeSpan.FromSeconds(15) };
+    private readonly HttpClient _client;
+    public SetupClient() : this(new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
+        { BaseAddress = new(SetupPaths.ServerUrl), Timeout = TimeSpan.FromSeconds(15) }) { }
+    internal SetupClient(HttpClient client) => _client = client;
     public async Task Check(CancellationToken cancellationToken)
     { using var response = await _client.GetAsync("api/auth/session", cancellationToken); response.EnsureSuccessStatusCode(); }
     public async Task<EnrollmentCredential> Claim(EnrollmentClaim value, CancellationToken cancellationToken)
@@ -37,7 +39,7 @@ public sealed class SetupClient : IDisposable
     {
         if (response.IsSuccessStatusCode) return;
         if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
-            throw new InvalidOperationException("接入凭据已过期或撤销，请返回网页重新生成绑定码。");
+            throw new SetupCredentialException();
         if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests) throw new InvalidOperationException("操作次数较多，请等待一分钟后重试。");
         var error = await response.Content.ReadFromJsonAsync<SetupError>(ProtocolJson.Options, cancellationToken);
         throw new InvalidOperationException(error?.Error ?? "服务器拒绝请求，请稍后重试。");
@@ -45,3 +47,5 @@ public sealed class SetupClient : IDisposable
     public void Dispose() => _client.Dispose();
     private sealed record SetupError(string? Error);
 }
+
+internal sealed class SetupCredentialException() : InvalidOperationException("接入凭据已过期或撤销。请点击“重新绑定”，在私人面板为这台电脑生成新绑定码，再回到向导输入；无需卸载或关闭向导。");

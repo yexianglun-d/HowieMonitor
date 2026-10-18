@@ -43,6 +43,22 @@ public sealed class EnrollmentTests : IDisposable
         Assert.Null(_store.IngestAuthenticated(authorization, new(false, [Sample(credential.DeviceId, _newSession, at: _now.AddSeconds(offset), memory: memory)]), _now).Error);
     }
 
+    [Fact] public void NvidiaSensorsSharingAnIndexDoNotBlockCandidateActivation()
+    {
+        var (credential, request) = Claim();
+        string authorization = "Bearer " + credential.Token;
+        Assert.Null(_store.RegisterAuthenticated(authorization, Registration(credential.DeviceId, "new-computer", _newSession), _now).Error);
+        var sample = Sample(credential.DeviceId, _newSession);
+        sample = sample with { Metrics = [.. sample.Metrics,
+            MetricReading.Present(Howie.Monitor.Collector.SensorCollector.MetricKey("sensor/GpuNvidia/1", LibreHardwareMonitor.Hardware.SensorType.Load, 3, "GPU Bus"), "sensor/GpuNvidia/1", "GPU Bus", 12, "%", "test"),
+            MetricReading.Present(Howie.Monitor.Collector.SensorCollector.MetricKey("sensor/GpuNvidia/1", LibreHardwareMonitor.Hardware.SensorType.Load, 3, "GPU Memory"), "sensor/GpuNvidia/1", "GPU Memory", 45, "%", "test")] };
+        Assert.Null(_store.BeatAuthenticated(authorization, new(credential.DeviceId, "boot", _newSession, 0, 0, 0, null), _now).Error);
+        Assert.Null(_store.IngestAuthenticated(authorization, new(false, [sample]), _now).Error);
+        Assert.Equal("ready", _store.EnrollmentStatus(authorization, _now)!.State);
+        Assert.Equal("active", _store.ActivateEnrollment(authorization, request, _now).Progress!.State);
+        Assert.Equal(4, _store.Latest(_now).Sample!.Metrics.Count);
+    }
+
     [Fact] public void LegacyCredentialContinuesUntilActivationAndPendingDoesNotChangeHistory()
     {
         var (credential, _) = Claim(); Stage(credential);

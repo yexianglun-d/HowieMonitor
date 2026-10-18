@@ -2,6 +2,9 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Howie.Monitor.Contracts;
+using Howie.Monitor.Collector;
+using LibreHardwareMonitor.Hardware;
+using System.Globalization;
 
 namespace Howie.Monitor.Agent;
 
@@ -24,6 +27,50 @@ public sealed class AgentQueue
             CREATE TABLE IF NOT EXISTS losses(id INTEGER PRIMARY KEY CHECK(id=1), count INTEGER NOT NULL, first INTEGER, last INTEGER);
             INSERT OR IGNORE INTO losses VALUES(1,0,NULL,NULL);
             """);
+        UpgradeSensorKeys(db);
+    }
+
+    private static void UpgradeSensorKeys(SqliteConnection db)
+    {
+        if (Number(db, null, "PRAGMA user_version") != 0) return;
+        using var transaction = db.BeginTransaction();
+        long after = 0;
+        while (true)
+        {
+            long row;
+            string json;
+            using (var command = db.CreateCommand())
+            {
+                command.Transaction = transaction;
+                command.CommandText = "SELECT rowid,payload FROM queue WHERE rowid>$after ORDER BY rowid LIMIT 1";
+                command.Parameters.AddWithValue("$after", after);
+                using var reader = command.ExecuteReader();
+                if (!reader.Read()) break;
+                row = reader.GetInt64(0); json = reader.GetString(1);
+            }
+            var sample = JsonSerializer.Deserialize<TelemetrySample>(json, ProtocolJson.Options)
+                ?? throw new InvalidOperationException("本地待上报采样无法读取。");
+            var metrics = sample.Metrics.Select(metric =>
+            {
+                string prefix = metric.DeviceId + "/";
+                if (!metric.DeviceId.StartsWith("sensor/", StringComparison.Ordinal)
+                    || !metric.Key.StartsWith(prefix, StringComparison.Ordinal)
+                    || !metric.Source.StartsWith("LibreHardwareMonitorLib 0.9.6:", StringComparison.Ordinal)) return metric;
+                var parts = metric.Key[prefix.Length..].Split('/');
+                if (parts.Length != 2 || !Enum.TryParse<SensorType>(parts[0], out var type)
+                    || !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out int index)) return metric;
+                return metric with { Key = SensorCollector.MetricKey(metric.DeviceId, type, index, metric.Name) };
+            }).ToArray();
+            if (sample.Metrics.Where((metric, index) => metric.Key != metrics[index].Key).Any())
+            {
+                // 已积压的旧采样也按相同规则升级，只改变指标标识，不丢弃实际数值或采样身份。
+                string upgraded = JsonSerializer.Serialize(sample with { Metrics = metrics }, ProtocolJson.Options);
+                Run(db, transaction, "UPDATE queue SET payload=$json,bytes=$bytes WHERE rowid=$row",
+                    ("$json", upgraded), ("$bytes", Encoding.UTF8.GetByteCount(upgraded)), ("$row", row));
+            }
+            after = row;
+        }
+        Run(db, transaction, "PRAGMA user_version=1"); transaction.Commit();
     }
 
     public void Add(TelemetrySample sample)

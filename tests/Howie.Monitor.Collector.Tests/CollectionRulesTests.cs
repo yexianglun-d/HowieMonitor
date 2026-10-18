@@ -88,6 +88,27 @@ public sealed class CollectionRulesTests
         Assert.Equal(status, SensorCollector.DriverStatus(error));
     }
 
+    [Fact]
+    public void NvidiaBusAndMemoryWithTheSameLoadIndexHaveDistinctStableKeys()
+    {
+        string bus = SensorCollector.MetricKey("sensor/GpuNvidia/1", SensorType.Load, 3, "GPU Bus");
+        string memory = SensorCollector.MetricKey("sensor/GpuNvidia/1", SensorType.Load, 3, "GPU Memory");
+        Assert.NotEqual(bus, memory);
+        Assert.Equal(memory, SensorCollector.MetricKey("sensor/GpuNvidia/1", SensorType.Load, 3, "GPU Memory"));
+        Assert.Equal(bus, SensorCollector.MetricKey("sensor/GpuNvidia/1", SensorType.Load, 3, "GPU Bus"));
+    }
+
+    [Fact]
+    public void SensorIdentityIsBoundedAndSeparatesHardwareTypeAndIndex()
+    {
+        string name = new('温', 300);
+        string key = SensorCollector.MetricKey("sensor/GpuNvidia/1", SensorType.Load, 3, name);
+        Assert.InRange(key.Length, 1, 200);
+        Assert.NotEqual(key, SensorCollector.MetricKey("sensor/GpuNvidia/2", SensorType.Load, 3, name));
+        Assert.NotEqual(key, SensorCollector.MetricKey("sensor/GpuNvidia/1", SensorType.Temperature, 3, name));
+        Assert.NotEqual(key, SensorCollector.MetricKey("sensor/GpuNvidia/1", SensorType.Load, 4, name));
+    }
+
     [Theory]
     [InlineData("--interval-seconds", "NaN")]
     [InlineData("--interval-seconds", "Infinity")]
