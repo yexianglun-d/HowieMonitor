@@ -40,8 +40,8 @@ const tablePoints = computed(() => [...observedPoints.value].reverse())
     <button class="text-button" :disabled="loading || catalogLoading || computerLoading" @click="loadComputers">刷新</button>
   </section>
   <p v-if="selectedComputer && selectedComputer.deviceId !== props.deviceId" class="state-banner" role="status">正在查看 {{ selectedComputer.name ?? '未记录名称的电脑' }} 的历史。保留期内记录：{{ formatDate(selectedComputer.firstSampleAt) }} — {{ formatDate(selectedComputer.lastSampleAt) }}；不代表该电脑当前仍在上报。</p>
-  <p v-if="error" class="error-banner" role="alert">{{ error }}</p>
   <p v-if="computerLoading || catalogLoading || loading" class="empty-state" role="status">正在查询历史数据…</p>
+  <section v-else-if="error" class="panel empty-state"><p>历史数据未加载</p><button class="secondary-button" @click="loadComputers">重新查询</button></section>
   <p v-else-if="!metrics.length && !error" class="panel empty-state">这台电脑暂无历史记录。</p>
   <template v-else-if="series">
     <div class="history-summary" data-enter><section class="panel"><span>平均值</span><strong>{{ valueText(series.average) }}</strong></section><section class="panel"><span>最高值</span><strong>{{ valueText(series.maximum) }}</strong><small>{{ formatDate(series.peakAt) }}</small></section><section class="panel"><span>有效采样</span><strong>{{ series.validSamples.toLocaleString() }}</strong><small>覆盖 {{ coverage }}</small></section></div>
@@ -52,8 +52,8 @@ const tablePoints = computed(() => [...observedPoints.value].reverse())
       <p v-if="!series.validSamples" class="empty-state">该范围没有这个指标的有效数据。</p>
     </section>
     <section id="peak-processes" class="panel"><div class="panel-heading"><div><h2>峰值时的主要进程</h2><p>{{ formatDate(processes?.sampledAt ?? selectedPoint?.peakAt) }} · CPU / 内存各前 5 项，已去重</p></div><strong class="detail-value">{{ valueText(selectedPoint?.maximum) }}</strong></div>
-      <p v-if="processError" class="error-banner" role="alert">{{ processError }}</p><p v-else-if="processLoading" class="empty-state" role="status">正在读取当时的进程…</p>
-      <ProcessTable v-else-if="processes" :processes="processes.processes"/><p v-if="processes" class="footnote">进程占用仅供对照，不能单独用来判断指标变化的原因。</p>
+      <div v-if="processError" class="empty-state"><p>进程数据未加载</p><button class="text-button" @click="selectPoint(selectedPoint)">重新读取</button></div><p v-else-if="processLoading" class="empty-state" role="status">正在读取当时的进程…</p>
+      <template v-else-if="processes"><ProcessTable :processes="processes.processes"/><p class="footnote">进程占用仅供对照，不能单独用来判断指标变化的原因。</p></template>
       <p v-else class="empty-state">选择下方时段查看峰值对应的进程。</p>
     </section>
     <section class="panel"><div class="panel-heading"><div><h2>采样明细</h2><p>选择时段查看峰值时的进程。</p></div></div><p class="scroll-hint">左右滑动查看完整明细</p><div class="table-scroll history-table" tabindex="0" aria-label="采样明细，可左右滚动"><table><thead><tr><th>时间</th><th>均值</th><th>最高值</th><th>有效采样</th><th>覆盖</th></tr></thead><tbody><tr v-for="point in tablePoints" :key="point.sampledAt" :class="{ selected: selectedPoint?.sampledAt === point.sampledAt }"><td>{{ formatDate(point.sampledAt) }}<button class="metric-link" :disabled="!point.peak" @click="inspectPoint(point)">查看进程</button></td><td>{{ valueText(point.value) }}</td><td>{{ valueText(point.maximum) }}</td><td>{{ point.validSamples }}</td><td>{{ point.coverageSeconds }} / {{ series.intervalSeconds }} 秒</td></tr></tbody></table></div><p v-if="!tablePoints.length" class="empty-state">此范围尚无记录。</p></section>

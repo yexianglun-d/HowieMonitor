@@ -2,11 +2,13 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useMonitor } from './composables/useMonitor'
 import { usePageMotion } from './composables/usePageMotion'
+import { useToast } from './composables/useToast'
 import { capacity, number, rate, time, uptime, statusText } from './utils/format'
 import { locationHash, readLocation, replaceQuery } from './utils/location'
 import MetricCard from './views/monitor/components/MetricCard.vue'
 import ProcessTable from './views/monitor/components/ProcessTable.vue'
 import TrendChart from './components/base/TrendChart.vue'
+import ToastHost from './components/base/ToastHost.vue'
 import HistoryView from './views/monitor/HistoryView.vue'
 import NotificationsView from './views/monitor/NotificationsView.vue'
 import EnrollmentView from './views/monitor/EnrollmentView.vue'
@@ -15,7 +17,8 @@ import ComputerSelector from './views/monitor/components/ComputerSelector.vue'
 import type { Metric, HistoryMetric } from './types/monitor'
 
 const initial = readLocation(window.location.hash)
-const { computers, selectedComputerId, selectComputer, authenticated, setupRequired, initializing, busy, error, device, latest, metrics, history, activeMetric, dataStatus, connectionStatus, cpu, gpu, memory, disk, signIn, signOut, find } = useMonitor(initial.query.get('computer') ?? '')
+const { computers, selectedComputerId, selectComputer, authenticated, setupRequired, initializing, busy, error, connectionError, device, latest, metrics, history, activeMetric, dataStatus, connectionStatus, cpu, gpu, memory, disk, signIn, signOut, find } = useMonitor(initial.query.get('computer') ?? '')
+const toast = useToast()
 const password = ref(''), showPassword = ref(false), view = ref(initial.page), pageRoot = ref<HTMLElement | null>(null)
 const overviewTab = ref('CPU'), metricQuery = ref(''), detailChart = ref<HTMLElement | null>(null)
 const nav = [{ key: 'overview', title: '运行总览', short: '总览' }, { key: 'detail', title: '指标详情', short: '指标' }, { key: 'processes', title: '进程列表', short: '进程' }, { key: 'history', title: '历史记录', short: '历史' }, { key: 'hardware', title: '硬件信息', short: '硬件' }, { key: 'notifications', title: '通知设置', short: '通知' }, { key: 'enrollment', title: '电脑接入', short: '接入' }] as const
@@ -48,6 +51,7 @@ watch(view, async page => {
   pageRoot.value?.querySelector<HTMLElement>('h1')?.focus({ preventScroll: true })
 })
 watch(selectedComputerId, id => { if (id) replaceQuery({ computer: id }); overviewTab.value = 'CPU' })
+watch(authenticated, () => toast.clear())
 function points(metric: Metric | null) { return metric ? history.value[metric.deviceId + ':' + metric.key] ?? [] : [] }
 function choose(metric: Metric | null) { if (!metric) return; activeMetric.value = metric; view.value = 'detail'; void locateChart() }
 async function locateChart() {
@@ -72,7 +76,8 @@ function groupName(group: string) {
 }
 function metricName(metric: Metric) { return metric.deviceId.startsWith('cpu/logical/') ? '逻辑处理器 ' + metric.deviceId.split('/').at(-1) : metric.name }
 function historyMetricLabel(metric: HistoryMetric) { return groupName(metric.deviceId.startsWith('cpu/logical/') ? 'cpu/logical' : metric.deviceId) + ' · ' + (metric.deviceId.startsWith('cpu/logical/') ? '逻辑处理器 ' + metric.deviceId.split('/').at(-1) : metric.name) }
-async function submit() { await signIn(password.value); if (authenticated.value) { password.value = ''; showPassword.value = false } }
+async function submit() { await signIn(password.value); if (authenticated.value) { password.value = ''; showPassword.value = false } else if (error.value) toast.error(error.value) }
+async function logout() { await signOut(); if (authenticated.value && error.value) toast.error(error.value) }
 </script>
 
 <template>
@@ -85,7 +90,7 @@ async function submit() { await signIn(password.value); if (authenticated.value)
       <form v-else @submit.prevent="submit">
         <label for="password">访问密码</label>
         <div class="password-field"><input id="password" v-model="password" :type="showPassword ? 'text' : 'password'" :autocomplete="setupRequired ? 'new-password' : 'current-password'" :minlength="setupRequired ? 12 : 1" maxlength="128" required autofocus><button type="button" :aria-pressed="showPassword" @click="showPassword = !showPassword">{{ showPassword ? '隐藏' : '显示' }}</button></div>
-        <p v-if="error" class="error-message" role="alert">{{ error }}</p>
+        <p v-if="connectionError" class="error-message" role="alert">{{ connectionError }}</p>
         <button class="primary-button" :disabled="busy">{{ busy ? '登录中…' : setupRequired ? '设置并登录' : '登录' }}</button>
       </form>
     </div>
@@ -94,16 +99,16 @@ async function submit() { await signIn(password.value); if (authenticated.value)
     <a class="skip-link" href="#main-content" @click.prevent="skipToContent">跳到内容</a>
     <aside class="sidebar">
       <div class="brand"><span class="brand-mark">H</span><span>Howie<span class="brand-light"> Monitor</span></span></div>
-      <button class="mobile-logout" :disabled="busy" @click="signOut">退出</button>
+      <button class="mobile-logout" :disabled="busy" @click="logout">退出</button>
       <nav aria-label="主导航"><button v-for="(item, index) in nav" :key="item.key" :class="{ active: view === item.key }" :aria-current="view === item.key ? 'page' : undefined" @click="view = item.key"><span class="nav-index" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span><span class="nav-full">{{ item.title }}</span><span class="nav-short">{{ item.short }}</span></button></nav>
-      <div class="sidebar-bottom"><div class="device-mini"><span class="connection-dot" :class="{ online: connectionStatus === 'online' }"></span><div><strong>{{ device?.name ?? '尚无电脑' }}</strong><small>{{ connectionStatus === 'online' ? '采集端在线' : '采集端离线' }}</small></div></div><button class="logout-button" :disabled="busy" @click="signOut">退出登录</button><span class="version">Howie Monitor · v0.1</span></div>
+      <div class="sidebar-bottom"><div class="device-mini"><span class="connection-dot" :class="{ online: connectionStatus === 'online' }"></span><div><strong>{{ device?.name ?? '尚无电脑' }}</strong><small>{{ connectionStatus === 'online' ? '采集端在线' : '采集端离线' }}</small></div></div><button class="logout-button" :disabled="busy" @click="logout">退出登录</button><span class="version">Howie Monitor · v0.1</span></div>
     </aside>
     <main id="main-content" class="workspace" tabindex="-1">
       <header class="topbar" :class="{ global: !devicePage }"><span>设备监控 <span class="separator">/</span> {{ title }}</span><div v-if="devicePage" class="topbar-right"><span class="status-badge" :class="{ fresh: dataStatus === 'fresh' }"><i></i>{{ statusLabel }}</span><time>{{ time(latest?.sample?.sampledAt) }}</time></div><span v-else class="muted">{{ view === 'history' ? '历史查询' : '所有电脑' }}</span></header>
       <div ref="pageRoot" class="page-content">
         <div class="page-heading" data-enter><div><h1 tabindex="-1">{{ title }}</h1><p class="page-description">{{ devicePage ? device?.inventory.operatingSystem ?? '选择电脑查看数据' : view === 'history' ? '按电脑、指标和时间查询。' : view === 'notifications' ? '所有电脑共用以下规则。' : '在 Windows 电脑上安装采集端。' }}</p></div><div v-if="devicePage && latest?.sample" class="uptime-block"><span>连续运行</span><strong>{{ uptime(latest.sample.uptimeSeconds) }}</strong></div></div>
         <ComputerSelector v-if="devicePage" :computers="computers" :selected-id="selectedComputerId" @select="selectComputer" @enroll="view = 'enrollment'"/>
-        <div v-if="error" class="error-banner" role="alert">{{ error }}</div>
+        <div v-if="connectionError" class="error-banner" role="alert">{{ connectionError }}</div>
         <div v-if="devicePage && dataStatus !== 'fresh' && latest?.sample" class="state-banner" role="status">{{ statusLabel }} · 以下为 {{ time(latest.sample.sampledAt) }} 的采样。<button class="text-button" @click="view = 'enrollment'">检查电脑接入</button></div>
         <details v-if="devicePage && latest?.agent?.droppedSamples" class="help-details"><summary>历史存在空缺</summary><p>采集端缓存已淘汰 {{ latest.agent.droppedSamples }} 个样本。</p></details>
 
@@ -129,4 +134,5 @@ async function submit() { await signIn(password.value); if (authenticated.value)
       </div>
     </main>
   </div>
+  <ToastHost/>
 </template>

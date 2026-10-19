@@ -11,7 +11,7 @@ const tick = () => new Promise(resolve => setImmediate(resolve))
 async function moduleAt(path, dependencies = {}, globals = {}) {
   const source = await readFile(new URL('../src/' + path, import.meta.url), 'utf8')
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
-  const sandbox = { exports: {}, require: name => dependencies[name], URLSearchParams, ...globals }
+  const sandbox = { exports: {}, require: name => dependencies[name], URLSearchParams, Error, ...globals }
   vm.runInNewContext(code, sandbox)
   return sandbox.exports
 }
@@ -20,18 +20,19 @@ const rule = { id: 'storage', kind: 'metric', key: 'volume.free', metricDeviceId
 const response = () => ({ settings: { enabled: false, dailyLimit: 5, hasCredential: false, rules: [] }, events: [], requestsToday: 0, budgetDate: '2026-10-19' })
 
 async function notificationHarness(overrides = {}) {
-  const lifecycle = {}, listeners = new Map(), timers = []
+  const lifecycle = {}, listeners = new Map(), timers = [], feedback = []
   let payload
   const api = { getNotifications: async () => response(), saveNotifications: async value => { payload = value; return { ...response(), settings: { ...value, hasCredential: !!value.sendKey } } }, ...overrides }
   const mod = await moduleAt('views/monitor/composables/useNotifications.ts', {
     vue: { ...vue, onMounted: fn => { lifecycle.mount = fn }, onUnmounted: fn => { lifecycle.unmount = fn },
       onActivated: fn => { lifecycle.activate = fn }, onDeactivated: fn => { lifecycle.deactivate = fn } },
     '../../../api/notifications': api,
+    '../../../composables/useToast': { useToast: () => Object.fromEntries(['success', 'error', 'info'].map(kind => [kind, message => feedback.push({ kind, message })])) },
   }, { AbortController, structuredClone, setTimeout: fn => { timers.push(fn); return timers.length }, clearTimeout() {},
     window: { addEventListener: (key, fn) => listeners.set(key, fn), removeEventListener: key => listeners.delete(key) } })
   const state = mod.useNotifications()
   lifecycle.mount(); await tick()
-  return { state, lifecycle, timers, listeners, payload: () => payload }
+  return { state, lifecycle, timers, listeners, feedback, payload: () => payload }
 }
 
 test('notification draft and transient key survive page deactivation and refresh, and are cleared on logout disposal', async () => {
@@ -58,6 +59,7 @@ test('saving sends original byte units and resets the saved-state indicator', as
     assert.equal(h.payload().rules[0].unit, 'B')
     assert.equal(h.payload().rules[0].threshold, 10737418240)
     assert.equal(h.state.dirty.value, false)
+    assert.deepEqual(h.feedback, [{ kind: 'success', message: '通知设置已保存' }])
     let warned = false
     h.listeners.get('beforeunload')({ preventDefault() { warned = true } })
     assert.equal(warned, false)
@@ -70,6 +72,52 @@ test('late notification requests cannot restore data after disposal', async () =
   h.lifecycle.unmount(); resolve(response()); await tick()
   assert.equal(h.state.ready.value, false)
   assert.equal(h.timers.length, 0)
+  assert.equal(h.feedback.length, 0)
+})
+
+test('a failed save keeps the draft and reports the actual failure through toast', async () => {
+  const h = await notificationHarness({ saveNotifications: async () => { throw new Error('Save unavailable') } })
+  try {
+    h.state.settings.value.dailyLimit = 8
+    await h.state.save()
+    assert.equal(h.state.dirty.value, true)
+    assert.equal(h.state.settings.value.dailyLimit, 8)
+    assert.equal(h.state.busy.value, false)
+    assert.deepEqual(h.feedback, [{ kind: 'error', message: 'Save unavailable' }])
+  } finally { h.lifecycle.unmount() }
+})
+
+test('polling errors are reported once per outage, and an explicit retry can report again', async () => {
+  let failing = true
+  const h = await notificationHarness({ getNotifications: async () => { if (failing) throw new Error('Read unavailable'); return response() } })
+  try {
+    assert.equal(h.feedback.length, 1)
+    await h.timers.at(-1)()
+    assert.equal(h.feedback.length, 1)
+    await h.state.refresh()
+    assert.equal(h.feedback.length, 2)
+    failing = false; await h.timers.at(-1)()
+    assert.equal(h.state.error.value, '')
+    failing = true; await h.timers.at(-1)()
+    assert.equal(h.feedback.length, 3)
+  } finally { h.lifecycle.unmount() }
+})
+
+test('a save finishing after logout cannot emit a toast', async () => {
+  let resolve
+  const h = await notificationHarness({ saveNotifications: () => new Promise(done => { resolve = done }) })
+  h.state.settings.value.dailyLimit = 8
+  const saving = h.state.save()
+  h.lifecycle.unmount(); resolve(response()); await saving
+  assert.equal(h.feedback.length, 0)
+})
+
+test('a queued test notification reports queueing rather than delivery', async () => {
+  const h = await notificationHarness({ testNotifications: async () => response() })
+  try {
+    await h.state.test()
+    assert.deepEqual(h.feedback, [{ kind: 'info', message: '测试通知已排队，请查看发送记录' }])
+  } finally { h.lifecycle.unmount() }
 })
 
 test('readable rule units round-trip without changing API units or treating empty input as zero', async () => {

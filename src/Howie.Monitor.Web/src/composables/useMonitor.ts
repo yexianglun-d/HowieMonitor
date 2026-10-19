@@ -84,5 +84,5 @@ export function useMonitor(initialComputerId = '') {
     finally { initializing.value = false }
   })
   onUnmounted(() => { stop(); clearInterval(clock); document.removeEventListener('visibilitychange', visibility) })
-  return { computers, selectedComputerId, selectComputer, authenticated, setupRequired, initializing, busy, error, device, latest, metrics, history, activeMetric, dataStatus, connectionStatus, cpu, gpu, memory, disk, signIn, signOut, find }
+  return { computers, selectedComputerId, selectComputer, authenticated, setupRequired, initializing, busy, error, connectionError, device, latest, metrics, history, activeMetric, dataStatus, connectionStatus, cpu, gpu, memory, disk, signIn, signOut, find }
 }

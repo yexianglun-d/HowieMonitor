@@ -6,7 +6,7 @@ import { useNotifications } from './composables/useNotifications'
 import { ruleUnit, ruleInput, ruleValue } from '../../utils/notificationUnits'
 import { number } from '../../utils/format'
 const props = defineProps<{ metrics: Metric[]; label: (metric: HistoryMetric) => string }>()
-const { settings, events, requestsToday, budgetDate, sendKey, clearCredential, loading, ready, busy, dirty, error, message, save, test, refresh } = useNotifications()
+const { settings, events, requestsToday, budgetDate, sendKey, clearCredential, loading, ready, busy, dirty, error, save, test, refresh } = useNotifications()
 const choice = ref('__offline')
 const metricId = (metric: HistoryMetric) => JSON.stringify([metric.key, metric.deviceId, metric.unit])
 const choices = computed(() => props.metrics.filter(metric => !metric.deviceId.startsWith('cpu/logical/')))
@@ -28,12 +28,10 @@ const date = (value: string) => new Date(value).toLocaleString('zh-CN', { hour12
 </script>
 <template>
   <p v-if="loading" class="panel empty-state" role="status">正在读取设置…</p>
-  <section v-else-if="!ready" class="panel"><p class="error-message" role="alert">{{ error || '读取失败，请重试。' }}</p><button class="secondary-button" @click="refresh">重新读取</button></section>
+  <section v-else-if="!ready" class="panel empty-state"><p>通知设置未加载</p><button class="secondary-button" @click="refresh">重新读取</button></section>
   <template v-else>
-    <p v-if="error" class="error-banner" role="alert">{{ error }}</p>
-    <p v-if="message" class="success-banner" role="status">{{ message }}</p>
     <form class="notification-form" :inert="busy || undefined" @submit.prevent="save">
-      <div class="save-bar"><span :class="dirty ? 'draft-state' : 'muted'">{{ dirty ? '有未保存的修改 · 切页后保留草稿' : '设置已同步' }}</span><button class="primary-button" :disabled="busy || !dirty">{{ busy ? '保存中…' : '保存设置' }}</button></div>
+      <div class="save-bar"><span :class="dirty ? 'draft-state' : error ? 'danger' : 'muted'">{{ dirty ? '有未保存的修改 · 切页后保留草稿' : error ? '通知数据更新失败' : '设置已同步' }}</span><button class="primary-button" :disabled="busy || !dirty">{{ busy ? '保存中…' : '保存设置' }}</button></div>
       <section class="panel notification-panel">
         <div class="panel-heading"><div><h2>微信通知</h2><p>通过 Server酱 Turbo 发送</p></div><label class="check-label"><input v-model="settings.enabled" type="checkbox" role="switch">开启通知</label></div>
         <div class="notification-fields"><label>SendKey<input v-model="sendKey" type="password" autocomplete="new-password" maxlength="203" placeholder="SCT 开头的密钥" :disabled="clearCredential"><small>{{ settings.hasCredential ? '已配置，留空保留。' : '尚未配置。' }} <a href="https://sct.ftqq.com/" target="_blank" rel="noopener noreferrer">获取密钥</a></small></label><label>每日请求上限<input v-model.number="settings.dailyLimit" type="number" min="1" max="1000" required><small>{{ budgetDate }} 已用 {{ requestsToday }} 次（北京时间）</small></label></div>

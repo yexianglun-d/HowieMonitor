@@ -2,8 +2,10 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import * as api from '../../../api/monitor'
 import type { HistoricalProcesses, HistoryBucketPoint, HistoryComputer, HistoryMetric, HistorySeries } from '../../../types/monitor'
 import { readLocation, replaceQuery } from '../../../utils/location'
+import { useToast } from '../../../composables/useToast'
 
 export function useHistory(owner: () => string | undefined) {
+  const toast = useToast()
   const initial = readLocation(window.location.hash).query
   const computers = ref<HistoryComputer[]>([]), selectedComputerId = ref(initial.get('historyComputer') ?? ''), computerLoading = ref(true)
   const selectedComputer = computed(() => computers.value.find(computer => computer.deviceId === selectedComputerId.value) ?? null)
@@ -35,6 +37,7 @@ export function useHistory(owner: () => string | undefined) {
     } catch (err) {
       if (current !== computerGeneration || err instanceof DOMException && err.name === 'AbortError') return
       error.value = err instanceof Error ? err.message : '历史电脑加载失败。'
+      toast.error(error.value)
     } finally { if (current === computerGeneration) { computerLoading.value = false; if (!selectedComputerId.value) catalogLoading.value = false } }
   }
 
@@ -50,6 +53,7 @@ export function useHistory(owner: () => string | undefined) {
     } catch (err) {
       if (current !== processGeneration || err instanceof DOMException && err.name === 'AbortError') return
       processError.value = err instanceof Error ? err.message : '历史进程查询失败。'
+      toast.error(processError.value)
     } finally { if (current === processGeneration) processLoading.value = false }
   }
 
@@ -68,6 +72,7 @@ export function useHistory(owner: () => string | undefined) {
     } catch (err) {
       if (current !== queryGeneration || err instanceof DOMException && err.name === 'AbortError') return
       error.value = err instanceof Error ? err.message : '历史查询失败。'
+      toast.error(error.value)
     } finally { if (current === queryGeneration) loading.value = false }
   }
 
@@ -87,6 +92,7 @@ export function useHistory(owner: () => string | undefined) {
     } catch (err) {
       if (current !== catalogGeneration || err instanceof DOMException && err.name === 'AbortError') return
       error.value = err instanceof Error ? err.message : '历史指标加载失败。'
+      toast.error(error.value)
     } finally { if (current === catalogGeneration) catalogLoading.value = false }
   }
   watch([selectedId, hours], refresh)
