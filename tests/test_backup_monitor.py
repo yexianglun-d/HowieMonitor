@@ -73,6 +73,47 @@ class BackupTests(unittest.TestCase):
         result = backup.verify(self.archive, self.destination)
         self.assertEqual(manifest['database'], result['database'])
 
+    def test_wal_without_sidecars_is_verified_without_changing_snapshot(self):
+        database = os.path.join(self.source, 'monitor.db')
+        with closing(sqlite3.connect(database)) as connection:
+            connection.execute('PRAGMA journal_mode=WAL')
+        self.assertFalse(os.path.exists(database + '-wal'))
+        self.assertFalse(os.path.exists(database + '-shm'))
+        before = backup.files(self.source)
+        manifest = backup.pack(self.source, self.archive, {})
+        self.assertEqual(before, backup.files(self.source))
+        self.assertEqual(before, manifest['files'])
+        result = backup.verify(self.archive, self.destination)
+        self.assertEqual(manifest['database'], result['database'])
+        self.assertEqual(before, backup.files(os.path.join(self.destination, 'data')))
+
+    def test_committed_wal_data_survives_pack_and_restore_without_changing_snapshot(self):
+        original = os.path.join(self.root, 'wal-source')
+        shutil.copytree(self.source, original)
+        with closing(sqlite3.connect(os.path.join(original, 'monitor.db'))) as connection:
+            connection.execute('PRAGMA journal_mode=WAL')
+            connection.execute('PRAGMA wal_autocheckpoint=0')
+            payload = {'deviceId': 'replacement', 'sessionId': 'wal-session', 'sequence': 99, 'sampledAt': '2026-10-19T00:00:00Z'}
+            connection.execute('UPDATE latest SET payload=? WHERE id=1', (json.dumps(payload),))
+            connection.commit()
+            for name in ('monitor.db', 'monitor.db-wal'):
+                shutil.copyfile(os.path.join(original, name), os.path.join(self.source, name))
+        self.assertGreater(os.path.getsize(os.path.join(self.source, 'monitor.db-wal')), 0)
+        before = backup.files(self.source)
+        manifest = backup.pack(self.source, self.archive, {})
+        self.assertEqual(99, manifest['database']['latest']['sequence'])
+        self.assertEqual(before, backup.files(self.source))
+        self.assertEqual(before, manifest['files'])
+        result = backup.verify(self.archive, self.destination)
+        self.assertEqual(99, result['database']['latest']['sequence'])
+        self.assertEqual(before, backup.files(os.path.join(self.destination, 'data')))
+
+    def test_missing_database_is_not_created_by_the_probe(self):
+        missing = os.path.join(self.root, 'missing')
+        os.mkdir(missing)
+        with self.assertRaises(FileNotFoundError): backup.database_report(missing)
+        self.assertEqual([], os.listdir(missing))
+
     def rewritten_archive(self, extra):
         backup.pack(self.source, self.archive, {})
         with tarfile.open(self.archive, 'r:gz') as source:

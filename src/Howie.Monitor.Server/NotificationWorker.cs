@@ -1,24 +1,16 @@
 namespace Howie.Monitor.Server;
 
-public sealed class NotificationWorker(NotificationStore notifications, TelemetryStore telemetry,
-    ServerChanSender sender, IConfiguration configuration, ILogger<NotificationWorker> logger) : BackgroundService
+public sealed class NotificationWorker(NotificationStore notifications, ServerChanSender sender,
+    ILogger<NotificationWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var started = DateTimeOffset.UtcNow;
-        string publicUrl = configuration["public-url"] ?? configuration["server-url"] ?? "http://localhost:5080";
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
             try
             {
                 var now = DateTimeOffset.UtcNow;
-                foreach (var computer in telemetry.Computers(now))
-                {
-                    var device = telemetry.Device(computer.DeviceId);
-                    var view = telemetry.Latest(now, computer.DeviceId);
-                    notifications.Evaluate(device, view, now, started, publicUrl);
-                }
                 var dispatch = notifications.BeginSend(now);
                 if (dispatch is null) continue;
                 var result = await sender.Send(dispatch, stoppingToken);

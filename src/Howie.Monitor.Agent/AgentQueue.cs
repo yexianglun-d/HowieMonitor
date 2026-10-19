@@ -98,12 +98,14 @@ public sealed class AgentQueue
         }
     }
 
-    public TelemetrySample? Latest()
+    public TelemetrySample? Latest(string sessionId)
     {
         lock (_gate)
         {
             using var db = Open(); using var cmd = db.CreateCommand();
-            cmd.CommandText = "SELECT payload FROM queue ORDER BY sampled DESC,sequence DESC LIMIT 1";
+            // 校时可能使时间倒退；实时样本只按当前会话的递增序号选择，旧会话留给补传。
+            cmd.CommandText = "SELECT payload FROM queue WHERE session=$session ORDER BY sequence DESC LIMIT 1";
+            cmd.Parameters.AddWithValue("$session", sessionId);
             return cmd.ExecuteScalar() is string json ? JsonSerializer.Deserialize<TelemetrySample>(json, ProtocolJson.Options) : null;
         }
     }

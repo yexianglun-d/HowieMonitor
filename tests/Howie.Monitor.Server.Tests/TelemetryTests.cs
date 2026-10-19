@@ -71,7 +71,27 @@ public sealed class TelemetryTests : IDisposable
     {
         var queue = new AgentQueue(Path.Combine(_directory,"agent")); queue.Add(Sample(1)); queue.Add(Sample(2));
         Assert.Equal(2,new AgentQueue(Path.Combine(_directory,"agent")).State().Count);
-        queue.Acknowledge(new([new(_session,1)])); Assert.Equal(1,queue.State().Count); Assert.Equal(2,queue.Latest()!.Sequence);
+        queue.Acknowledge(new([new(_session,1)])); Assert.Equal(1,queue.State().Count); Assert.Equal(2,queue.Latest(_session)!.Sequence);
+    }
+    [Fact] public void QueueClockCorrectionSelectsTheNewerSequenceAndKeepsUnacknowledgedData()
+    {
+        var queue = new AgentQueue(Path.Combine(_directory, "agent"));
+        queue.Add(Sample(1, _now.AddHours(1))); queue.Add(Sample(2));
+        var current = Assert.IsType<TelemetrySample>(queue.Latest(_session));
+        Assert.Equal(2, current.Sequence);
+        Assert.Null(TelemetryValidation.Validate(new(false, [current]), "device", _now));
+        queue.Acknowledge(_store.Ingest(new(false, [current]), _now));
+        Assert.Equal("fresh", _store.Latest(_now).DataStatus);
+        Assert.Equal(1, queue.State().Count); Assert.Equal(1, queue.Latest(_session)!.Sequence);
+    }
+    [Fact] public void QueuedFutureSampleFromPreviousSessionCannotHideCurrentSession()
+    {
+        var queue = new AgentQueue(Path.Combine(_directory, "agent"));
+        queue.Add(Sample(100, _now.AddHours(1)) with { SessionId = Guid.NewGuid().ToString() });
+        queue.Add(Sample(0));
+        Assert.Equal(_session, queue.Latest(_session)!.SessionId);
+        Assert.Equal(0, queue.Latest(_session)!.Sequence); Assert.Equal(2, queue.State().Count);
+        Assert.Null(queue.Latest(Guid.NewGuid().ToString()));
     }
     private static MetricReading NvidiaLoad(string name, double value, bool legacy = false) => MetricReading.Present(
         legacy ? "sensor/GpuNvidia/1/Load/3" : SensorCollector.MetricKey("sensor/GpuNvidia/1", SensorType.Load, 3, name),
@@ -107,13 +127,13 @@ public sealed class TelemetryTests : IDisposable
         Assert.Equal(NvidiaLoad("GPU Bus", 12).Key, sample.Metrics[0].Key);
         Assert.Equal(NvidiaLoad("GPU Memory", 45).Key, sample.Metrics[1].Key);
         Assert.Equal(1, migrated.State().Count); Assert.Equal(0, migrated.State().Dropped);
-        Assert.Equal(sample.Metrics, new AgentQueue(directory).Latest()!.Metrics);
+        Assert.Equal(sample.Metrics, new AgentQueue(directory).Latest(_session)!.Metrics);
         migrated.Acknowledge(new([new(sample.SessionId, sample.Sequence)])); Assert.Equal(0, migrated.State().Count);
     }
     [Fact] public void ExpiredQueueRecordsLossWithoutLosingCurrent()
     {
         var queue = new AgentQueue(Path.Combine(_directory,"agent")); queue.Add(Sample(1,_now.AddHours(-2))); queue.Add(Sample(2));
-        Assert.Equal(1,queue.State().Dropped); Assert.NotNull(queue.State().DroppedFrom); Assert.Equal(2,queue.Latest()!.Sequence);
+        Assert.Equal(1,queue.State().Dropped); Assert.NotNull(queue.State().DroppedFrom); Assert.Equal(2,queue.Latest(_session)!.Sequence);
     }
     [Fact] public void IndependentBrowserSessionsRemainValidAndLogoutOnlyRevokesOne()
     {

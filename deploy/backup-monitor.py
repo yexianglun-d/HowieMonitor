@@ -46,9 +46,18 @@ def files(directory, with_hash=True):
 
 
 def database_report(directory):
-    database = os.path.join(directory, 'monitor.db')
-    connection = sqlite3.connect(Path(database).resolve().as_uri() + '?mode=ro', uri=True)
+    # 只在隔离副本中恢复日志和重建共享内存，避免 WAL 探测改变原快照或恢复后的文件清单。
+    with tempfile.TemporaryDirectory(prefix='.database-check-', dir=os.path.dirname(os.path.abspath(directory))) as temporary:
+        for name in ('monitor.db', 'monitor.db-wal', 'monitor.db-journal'):
+            source = os.path.join(directory, name)
+            if name == 'monitor.db' or os.path.exists(source): shutil.copyfile(source, os.path.join(temporary, name))
+        return read_database_report(os.path.join(temporary, 'monitor.db'))
+
+
+def read_database_report(database):
+    connection = sqlite3.connect(Path(database).resolve().as_uri() + '?mode=rw', uri=True)
     try:
+        connection.execute('PRAGMA query_only=ON')
         if connection.execute('PRAGMA integrity_check').fetchone()[0] != 'ok': raise ValueError('Database integrity check failed')
         result = {'tables': {table: connection.execute('SELECT count(*) FROM ' + table).fetchone()[0] for table in TABLES}}
         result['activeDevice'] = connection.execute('SELECT device FROM enrollment_active WHERE id=1').fetchone()[0]
@@ -68,7 +77,7 @@ def database_report(directory):
 
 
 def pack(snapshot, archive, context):
-    # WAL 模式的只读连接仍可能创建空日志/共享内存文件；先校验，再固定完整文件清单。
+    # 数据库及其日志按原样归档，检查使用临时副本，不改写快照中的任何文件。
     report = database_report(snapshot)
     inventory = files(snapshot)
     required = ('monitor.db', 'user.json', 'device-credential.json', 'notifications.json')
@@ -145,7 +154,8 @@ def backup():
     if not os.path.realpath(BASE + '/current').startswith(BASE + '/releases/') or os.path.realpath(DATA) != DATA:
         raise ValueError('Project paths do not match')
     size = sum(value['bytes'] for value in files(DATA, False).values())
-    if shutil.disk_usage(ROOT).free < size * 3 + 100 * 1024 * 1024: raise ValueError('Insufficient backup space')
+    # 快照、归档、恢复副本和数据库检查副本可能同时占用备份盘。
+    if shutil.disk_usage(ROOT).free < size * 4 + 100 * 1024 * 1024: raise ValueError('Insufficient backup space')
     stamp = time.strftime('%Y%m%d-%H%M%S', time.gmtime())
     archive = os.path.join(ROOT, 'monitor-' + stamp + '.tar.gz')
     staging = tempfile.mkdtemp(prefix='.snapshot-', dir=ROOT)

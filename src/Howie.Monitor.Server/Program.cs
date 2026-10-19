@@ -26,6 +26,8 @@ builder.Services.AddHostedService<HistoryMaintenanceWorker>();
 builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(dataDirectory, "keys")));
 builder.Services.AddSingleton(provider => new NotificationStore(dataDirectory, provider.GetRequiredService<Microsoft.AspNetCore.DataProtection.IDataProtectionProvider>()));
 builder.Services.AddSingleton<ServerChanSender>();
+// 持续规则观察独立于外部发送请求，发送超时不能打断采样证据。
+builder.Services.AddHostedService<NotificationEvaluationWorker>();
 builder.Services.AddHostedService<NotificationWorker>();
 builder.Services.AddSingleton(new SetupPackage(builder.Configuration["setup-package"] ?? Path.Combine(dataDirectory, "downloads", "HowieMonitorSetup.exe")));
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(options =>

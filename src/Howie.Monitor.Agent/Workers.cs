@@ -82,7 +82,7 @@ public sealed class UploadWorker(AgentState state, AgentQueue queue, HttpClient 
                     state.Registration.BootId, state.Registration.SessionId, Interlocked.Read(ref state.LastSequence),
                     queueState.Count, queueState.Dropped, state.LastError, queueState.DroppedFrom, queueState.DroppedTo), ProtocolJson.Options, token);
                 beat.EnsureSuccessStatusCode();
-                var sample = queue.Latest();
+                var sample = queue.Latest(state.Registration.SessionId);
                 if (sample is not null && sample.SessionId == state.Registration.SessionId && sample.SampledAt >= DateTimeOffset.UtcNow.AddSeconds(-10))
                     await Send(new(false, [sample]), token);
                 state.LastError = null;
