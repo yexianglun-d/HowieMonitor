@@ -39,6 +39,16 @@ class PublicSourceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'JSON'):
             EXPORTER.collect(self.root)
 
+    def test_reviewed_favicon_is_allowed_without_allowing_other_svg_files(self):
+        relative = 'src/Howie.Monitor.Web/public/favicon.svg'
+        favicon = self.root / relative
+        favicon.parent.mkdir(parents=True)
+        favicon.write_text('<svg xmlns="http://www.w3.org/2000/svg"/>', encoding='utf-8')
+        self.assertEqual(EXPORTER.collect(self.root)[relative], favicon.read_bytes())
+        (favicon.parent / 'private.svg').write_text('<svg/>', encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'file type'):
+            EXPORTER.collect(self.root)
+
     def test_tokens_are_rejected_without_echoing_values(self):
         token = 'ghp_' + 'A' * 40
         (self.root / 'src' / 'App.cs').write_text(token, encoding='utf-8')

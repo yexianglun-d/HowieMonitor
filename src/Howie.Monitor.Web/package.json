@@ -10,6 +10,7 @@
     "build": "vue-tsc --noEmit && vite build"
   },
   "dependencies": {
+    "element-plus": "2.14.7",
     "gsap": "3.15.0",
     "vue": "3.5.43"
   },

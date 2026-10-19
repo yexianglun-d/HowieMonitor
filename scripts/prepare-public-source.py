@@ -18,6 +18,7 @@ EXCLUDED = {'bin', 'obj', 'node_modules', 'wwwroot', '__pycache__', '.git',
             '.local', 'reports', 'artifacts', 'output', 'TestResults'}
 EXTENSIONS = {'.cs', '.csproj', '.json', '.manifest', '.html', '.ts', '.mjs', '.vue',
               '.css', '.py', '.template', '.txt', '.xml', '.yml', '.yaml'}
+ASSET_FILES = {'src/Howie.Monitor.Web/public/favicon.svg'}
 JSON_FILES = {'packages.lock.json', 'package.json', 'package-lock.json',
               'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json',
               'agent.example.json'}
@@ -53,7 +54,7 @@ def collect(root):
                 regular(Path(directory) / name)
             for name in sorted(files):
                 path = Path(directory) / name
-                if path.suffix not in EXTENSIONS:
+                if path.suffix not in EXTENSIONS and path.relative_to(root).as_posix() not in ASSET_FILES:
                     raise ValueError('Unexpected source file type: ' + str(path.relative_to(root)))
                 if path.suffix == '.json' and path.name not in JSON_FILES:
                     raise ValueError('Unexpected JSON configuration: ' + str(path.relative_to(root)))

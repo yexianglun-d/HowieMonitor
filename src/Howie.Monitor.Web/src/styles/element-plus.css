@@ -1,0 +1,61 @@
+@import 'element-plus/theme-chalk/base.css';
+@import 'element-plus/theme-chalk/el-alert.css';
+@import 'element-plus/theme-chalk/el-button.css';
+@import 'element-plus/theme-chalk/el-card.css';
+@import 'element-plus/theme-chalk/el-checkbox.css';
+@import 'element-plus/theme-chalk/el-collapse.css';
+@import 'element-plus/theme-chalk/el-descriptions.css';
+@import 'element-plus/theme-chalk/el-empty.css';
+@import 'element-plus/theme-chalk/el-input.css';
+@import 'element-plus/theme-chalk/el-select.css';
+@import 'element-plus/theme-chalk/el-skeleton.css';
+@import 'element-plus/theme-chalk/el-switch.css';
+@import 'element-plus/theme-chalk/el-tag.css';
+@import 'element-plus/theme-chalk/dark/css-vars.css';
+
+html.dark {
+  --el-color-primary: #9adbc9;
+  --el-color-primary-light-3: #b8e6da;
+  --el-color-primary-light-5: #435f55;
+  --el-color-primary-light-7: #30483e;
+  --el-color-primary-light-8: #283c33;
+  --el-color-primary-light-9: #1c2b24;
+  --el-color-primary-dark-2: #7fc4ae;
+  --el-bg-color: #191e1d;
+  --el-bg-color-page: #101414;
+  --el-bg-color-overlay: #202825;
+  --el-fill-color-blank: #151c19;
+  --el-border-color: #44534c;
+  --el-border-color-light: #35423b;
+  --el-border-color-lighter: #303936;
+  --el-text-color-primary: #e6ece8;
+  --el-text-color-regular: #c5d0c9;
+  --el-text-color-secondary: #a2b0aa;
+  --el-font-family: "Bahnschrift", "Microsoft YaHei UI", sans-serif;
+}
+.el-button--primary:not(.is-link):not(.is-text):not(.is-plain) { --el-button-text-color: #12251e; --el-button-hover-text-color: #12251e; --el-button-active-text-color: #12251e }
+.el-button + .el-button { margin-left: 0 }
+.el-input, .el-select { min-width: 0; width: 100% }
+.el-collapse { --el-collapse-header-bg-color: transparent; --el-collapse-content-bg-color: transparent; border: 0 }
+.el-collapse-item__header { font-weight: 500; text-align: left; line-height: 1.6; height: auto; min-height: 44px }
+.el-collapse-item__wrap { border: 0 }
+.el-collapse-item__content { padding-bottom: 12px; overflow-wrap: anywhere }
+.el-alert { margin-bottom: 20px }
+.el-alert__content { min-width: 0 }
+.el-alert__description { overflow-wrap: anywhere }
+.initial-screen { min-height: 100dvh; display: grid; place-items: center; padding: 24px }
+.initial-panel { width: min(100%, 340px) }
+.initial-panel .brand { margin-bottom: 36px }
+.initial-panel p { color: var(--muted); font-size: 13px; margin-top: 20px }
+.computer-loading { min-height: 320px; padding-block: 36px }
+.process-tools .el-input { flex: 1 1 220px; max-width: 360px }
+.process-tools .el-select { width: 180px; flex: 0 0 auto }
+.notification-add .el-select { width: auto; min-width: 0; flex: 1 }
+.notification-add .el-button { flex-shrink: 0 }
+.notification-fields .el-input__inner { width: 100% }
+.history-field .el-select { width: 100% }
+.hardware-panel .el-descriptions__cell { line-height: 1.7 }
+@media (max-width: 700px) {
+  .notification-add .el-select { flex-basis: 100%; width: 100% }
+  .process-tools .el-select { width: 150px }
+}

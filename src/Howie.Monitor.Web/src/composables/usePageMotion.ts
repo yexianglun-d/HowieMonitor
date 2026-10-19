@@ -13,8 +13,8 @@ export function usePageMotion(root: Ref<HTMLElement | null>, change: () => strin
     media.add('(prefers-reduced-motion: no-preference)', () => {
       const element = root.value!
       const targets = [...(element.matches('[data-enter]') ? [element] : []), ...element.querySelectorAll('[data-enter]')]
-      gsap.fromTo(targets, { opacity: 0, y: 12 }, {
-        opacity: 1, y: 0, duration: .34, stagger: { amount: .12 }, ease: 'power2.out', overwrite: 'auto', clearProps: 'opacity,transform',
+      gsap.fromTo(targets, { opacity: 0 }, {
+        opacity: 1, duration: .16, ease: 'power2.out', overwrite: 'auto', clearProps: 'opacity',
       })
     }, root.value)
   }
