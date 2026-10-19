@@ -1,11 +1,13 @@
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import * as api from '../../../api/monitor'
 import type { HistoricalProcesses, HistoryBucketPoint, HistoryComputer, HistoryMetric, HistorySeries } from '../../../types/monitor'
+import { readLocation, replaceQuery } from '../../../utils/location'
 
 export function useHistory(owner: () => string | undefined) {
-  const computers = ref<HistoryComputer[]>([]), selectedComputerId = ref(''), computerLoading = ref(true)
+  const initial = readLocation(window.location.hash).query
+  const computers = ref<HistoryComputer[]>([]), selectedComputerId = ref(initial.get('historyComputer') ?? ''), computerLoading = ref(true)
   const selectedComputer = computed(() => computers.value.find(computer => computer.deviceId === selectedComputerId.value) ?? null)
-  const metrics = ref<HistoryMetric[]>([]), selectedId = ref(''), hours = ref(24)
+  const metrics = ref<HistoryMetric[]>([]), selectedId = ref(initial.get('metric') ?? ''), hours = ref([1, 24, 168].includes(Number(initial.get('hours'))) ? Number(initial.get('hours')) : 24)
   const catalogLoading = ref(true), loading = ref(false), processLoading = ref(false)
   const error = ref(''), processError = ref(''), series = ref<HistorySeries | null>(null), processes = ref<HistoricalProcesses | null>(null)
   const selectedPoint = ref<HistoryBucketPoint | null>(null)
@@ -90,7 +92,20 @@ export function useHistory(owner: () => string | undefined) {
   watch([selectedId, hours], refresh)
   watch(selectedComputerId, loadCatalog)
   watch(owner, loadComputers, { immediate: true })
-  onUnmounted(() => { queryGeneration++; processGeneration++; catalogGeneration++; computerGeneration++; computerController?.abort(); catalogController?.abort(); queryController?.abort(); processController?.abort() })
+  watch([selectedComputerId, selectedId, hours, catalogLoading, computerLoading], () => {
+    if (!catalogLoading.value && !computerLoading.value && selectedComputerId.value && selectedId.value && readLocation(window.location.hash).page === 'history')
+      replaceQuery({ historyComputer: selectedComputerId.value, metric: selectedId.value, hours: String(hours.value) })
+  })
+  function restoreQuery() {
+    const location = readLocation(window.location.hash)
+    if (location.page !== 'history') return
+    const computer = location.query.get('historyComputer'), metric = location.query.get('metric'), range = Number(location.query.get('hours'))
+    if (computer && computers.value.some(item => item.deviceId === computer)) selectedComputerId.value = computer
+    if (metric) selectedId.value = metric
+    if ([1, 24, 168].includes(range)) hours.value = range
+  }
+  onMounted(() => { window.addEventListener('hashchange', restoreQuery); window.addEventListener('popstate', restoreQuery) })
+  onUnmounted(() => { queryGeneration++; processGeneration++; catalogGeneration++; computerGeneration++; computerController?.abort(); catalogController?.abort(); queryController?.abort(); processController?.abort(); window.removeEventListener('hashchange', restoreQuery); window.removeEventListener('popstate', restoreQuery) })
   return { computers, selectedComputerId, selectedComputer, computerLoading, metrics, selectedId, hours, selectedMetric, catalogLoading, loading, processLoading, error, processError, series,
     processes, selectedPoint, observedPoints, identity, refresh, loadComputers, selectPoint }
 }

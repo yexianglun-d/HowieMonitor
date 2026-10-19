@@ -3,11 +3,11 @@ import * as api from '../api/monitor'
 import { ApiError } from '../api/request'
 import type { ComputerSummary, Device, Latest, Metric, HistoryPoint } from '../types/monitor'
 
-export function useMonitor() {
+export function useMonitor(initialComputerId = '') {
   const authenticated = ref(false), setupRequired = ref(false), initializing = ref(true), busy = ref(false)
   const connectionError = ref(''), authError = ref(''), device = ref<Device | null>(null), latest = ref<Latest | null>(null)
   const error = computed(() => authError.value || connectionError.value)
-  const computers = ref<ComputerSummary[]>([]), selectedComputerId = ref('')
+  const computers = ref<ComputerSummary[]>([]), selectedComputerId = ref(initialComputerId)
   const history = ref<Record<string, HistoryPoint[]>>({}), activeMetric = ref<Metric | null>(null), now = ref(Date.now())
   let timer: ReturnType<typeof setTimeout> | undefined, clock: ReturnType<typeof setInterval> | undefined
   let controller: AbortController | null = null, generation = 0, serverFetchedAt = 0

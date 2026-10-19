@@ -3,7 +3,20 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": { "dev": "vite --host localhost", "type-check": "vue-tsc --noEmit", "test": "node --test tests/*.test.mjs", "build": "vue-tsc --noEmit && vite build" },
-  "dependencies": { "vue": "3.5.43" },
-  "devDependencies": { "@vitejs/plugin-vue": "6.0.10", "vite": "8.3.4", "typescript": "5.9.3", "vue-tsc": "3.3.13" }
+  "scripts": {
+    "dev": "vite --host localhost",
+    "type-check": "vue-tsc --noEmit",
+    "test": "node --test tests/*.test.mjs",
+    "build": "vue-tsc --noEmit && vite build"
+  },
+  "dependencies": {
+    "gsap": "3.15.0",
+    "vue": "3.5.43"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "6.0.10",
+    "typescript": "5.9.3",
+    "vite": "8.3.4",
+    "vue-tsc": "3.3.13"
+  }
 }

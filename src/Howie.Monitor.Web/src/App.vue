@@ -1,88 +1,132 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useMonitor } from './composables/useMonitor'
+import { usePageMotion } from './composables/usePageMotion'
 import { capacity, number, rate, time, uptime, statusText } from './utils/format'
+import { locationHash, readLocation, replaceQuery } from './utils/location'
 import MetricCard from './views/monitor/components/MetricCard.vue'
 import ProcessTable from './views/monitor/components/ProcessTable.vue'
 import TrendChart from './components/base/TrendChart.vue'
 import HistoryView from './views/monitor/HistoryView.vue'
 import NotificationsView from './views/monitor/NotificationsView.vue'
 import EnrollmentView from './views/monitor/EnrollmentView.vue'
+import HardwareView from './views/monitor/HardwareView.vue'
 import ComputerSelector from './views/monitor/components/ComputerSelector.vue'
 import type { Metric, HistoryMetric } from './types/monitor'
 
-const { computers, selectedComputerId, selectComputer, authenticated, setupRequired, initializing, busy, error, device, latest, metrics, history, activeMetric, dataStatus, connectionStatus, cpu, gpu, memory, disk, signIn, signOut, find } = useMonitor()
-const password = ref(''), view = ref<'overview' | 'detail' | 'processes' | 'hardware' | 'history' | 'notifications' | 'enrollment'>('overview')
-// 单页导航保留了同一个文档，切页后需回到页首，避免继承长表格的滚动位置。
-watch(view, () => window.scrollTo({ top: 0, left: 0, behavior: 'instant' }), { flush: 'post' })
-const nav = [{ key: 'overview', title: '运行总览', icon: '◫' }, { key: 'detail', title: '指标详情', icon: '⌁' }, { key: 'processes', title: '进程列表', icon: '≡' }, { key: 'history', title: '历史记录', icon: '◷' }, { key: 'hardware', title: '硬件信息', icon: '▣' }, { key: 'notifications', title: '通知设置', icon: '♧' }, { key: 'enrollment', title: '电脑接入', icon: '＋' }] as const
+const initial = readLocation(window.location.hash)
+const { computers, selectedComputerId, selectComputer, authenticated, setupRequired, initializing, busy, error, device, latest, metrics, history, activeMetric, dataStatus, connectionStatus, cpu, gpu, memory, disk, signIn, signOut, find } = useMonitor(initial.query.get('computer') ?? '')
+const password = ref(''), showPassword = ref(false), view = ref(initial.page), pageRoot = ref<HTMLElement | null>(null)
+const overviewTab = ref('CPU'), metricQuery = ref(''), detailChart = ref<HTMLElement | null>(null)
+const nav = [{ key: 'overview', title: '运行总览', short: '总览' }, { key: 'detail', title: '指标详情', short: '指标' }, { key: 'processes', title: '进程列表', short: '进程' }, { key: 'history', title: '历史记录', short: '历史' }, { key: 'hardware', title: '硬件信息', short: '硬件' }, { key: 'notifications', title: '通知设置', short: '通知' }, { key: 'enrollment', title: '电脑接入', short: '接入' }] as const
+const title = computed(() => nav.find(item => item.key === view.value)!.title)
+const devicePage = computed(() => !['history', 'notifications', 'enrollment'].includes(view.value))
 const statusLabel = computed(() => ({ fresh: '数据最新', delayed: '更新延迟', stale: '数据过期', waiting: '等待采样', clockError: '时钟异常' })[dataStatus.value] ?? '未知状态')
 const selected = computed(() => activeMetric.value ? metrics.value.find(metric => metric.key === activeMetric.value!.key && metric.deviceId === activeMetric.value!.deviceId) ?? activeMetric.value : cpu.value)
+// 总览仅使用四个百分比指标，详情选择不能改变总览的单位与坐标。
+const overviewItems = computed(() => [{ label: 'CPU', metric: cpu.value, color: '#e8c58c' }, { label: 'GPU', metric: gpu.value, color: '#aeb7f1' }, { label: '内存', metric: memory.value, color: '#9adbc9' }, { label: '磁盘', metric: disk.value, color: '#9fbacf' }])
+const overviewSelected = computed(() => overviewItems.value.find(item => item.label === overviewTab.value) ?? overviewItems.value[0]!)
 const chartPoints = computed(() => points(selected.value))
-const networks = computed(() => device.value?.inventory.networks ?? [])
 const groupId = (metric: Metric) => metric.deviceId.startsWith('cpu/logical/') ? 'cpu/logical' : metric.deviceId
-const detailGroups = computed(() => [...new Set(metrics.value.map(groupId))])
-const isStale = computed(() => dataStatus.value !== 'fresh')
-function points(metric: Metric | null) { return metric ? history.value[`${metric.deviceId}:${metric.key}`] ?? [] : [] }
-function choose(metric: Metric | null) { activeMetric.value = metric; view.value = 'detail' }
-function metricValue(metric: Metric | null) { if (!metric || metric.value === null) return '—'; return metric.unit === 'B' ? capacity(metric.value) : metric.unit === 'B/s' ? rate(metric.value) : `${number(metric.value)} ${metric.unit}` }
+const filteredMetrics = computed(() => metrics.value.filter(metric => (metricName(metric) + ' ' + groupName(groupId(metric))).toLowerCase().includes(metricQuery.value.toLowerCase())))
+const detailGroups = computed(() => [...new Set(filteredMetrics.value.map(groupId))])
+usePageMotion(pageRoot, () => String(authenticated.value) + ':' + view.value + ':' + (devicePage.value ? selectedComputerId.value + ':' + Boolean(latest.value?.sample) : 'global'))
+function syncLocation() {
+  const location = readLocation(window.location.hash)
+  view.value = location.page
+  const computer = location.query.get('computer')
+  if (computer) selectComputer(computer)
+}
+function skipToContent() { document.getElementById('main-content')?.focus(); window.scrollTo({ top: 0, behavior: 'instant' }) }
+onMounted(() => { window.addEventListener('hashchange', syncLocation); window.addEventListener('popstate', syncLocation) })
+onUnmounted(() => { window.removeEventListener('hashchange', syncLocation); window.removeEventListener('popstate', syncLocation) })
+watch(view, async page => {
+  const location = readLocation(window.location.hash)
+  if (location.page !== page) window.history.pushState(null, '', locationHash(page, location.query))
+  await nextTick()
+  window.scrollTo({ top: 0, behavior: 'instant' })
+  pageRoot.value?.querySelector<HTMLElement>('h1')?.focus({ preventScroll: true })
+})
+watch(selectedComputerId, id => { if (id) replaceQuery({ computer: id }); overviewTab.value = 'CPU' })
+function points(metric: Metric | null) { return metric ? history.value[metric.deviceId + ':' + metric.key] ?? [] : [] }
+function choose(metric: Metric | null) { if (!metric) return; activeMetric.value = metric; view.value = 'detail'; void locateChart() }
+async function locateChart() {
+  await nextTick()
+  detailChart.value?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })
+  detailChart.value?.focus({ preventScroll: true })
+}
+function metricValue(metric: Metric | null) { if (!metric || metric.value === null) return '—'; return metric.unit === 'B' ? capacity(metric.value) : metric.unit === 'B/s' ? rate(metric.value) : number(metric.value) + ' ' + metric.unit }
 function networkValue(id: string, key: string) { return rate(metrics.value.find(metric => metric.deviceId === id && metric.key === key)?.value) }
 function groupName(group: string) {
-  if (group === 'cpu/logical') return 'CPU 各逻辑处理器'
-  if (group === 'cpu/total') return 'CPU 总览'
-  if (group === 'memory') return '物理内存'
+  if (group === 'cpu/logical') return 'CPU 逻辑处理器'
+  if (group === 'cpu/total') return 'CPU'
+  if (group === 'memory') return '内存'
   if (group.startsWith('sensor/Cpu')) return 'CPU 传感器'
-  if (group.startsWith('sensor/Gpu') || group === 'gpu') return 'GPU 传感器'
+  if (group.startsWith('sensor/Gpu') || group === 'gpu') return 'GPU'
   const network = device.value?.inventory.networks.find(item => item.id === group)
-  if (network) return `网络 · ${network.name}`
+  if (network) return '网络 · ' + network.name
   const physical = device.value?.inventory.physicalDisks.find(item => item.id === group)
-  if (physical) return `物理磁盘 ${physical.index} · ${physical.name}`
-  if (group.startsWith('sensor/Storage') || group === 'disk') return '磁盘传感器'
-  return `分区 ${group}`
+  if (physical) return '磁盘 ' + physical.index + ' · ' + physical.name
+  if (group.startsWith('sensor/Storage') || group === 'disk') return '磁盘'
+  return '分区 ' + group
 }
-function metricName(metric: Metric) { return metric.deviceId.startsWith('cpu/logical/') ? `逻辑处理器 ${metric.deviceId.split('/').at(-1)}` : metric.name }
-function historyMetricLabel(metric: HistoryMetric) { return `${groupName(metric.deviceId.startsWith('cpu/logical/') ? 'cpu/logical' : metric.deviceId)} · ${metric.deviceId.startsWith('cpu/logical/') ? `逻辑处理器 ${metric.deviceId.split('/').at(-1)}` : metric.name}` }
-async function submit() { await signIn(password.value); if (authenticated.value) password.value = '' }
+function metricName(metric: Metric) { return metric.deviceId.startsWith('cpu/logical/') ? '逻辑处理器 ' + metric.deviceId.split('/').at(-1) : metric.name }
+function historyMetricLabel(metric: HistoryMetric) { return groupName(metric.deviceId.startsWith('cpu/logical/') ? 'cpu/logical' : metric.deviceId) + ' · ' + (metric.deviceId.startsWith('cpu/logical/') ? '逻辑处理器 ' + metric.deviceId.split('/').at(-1) : metric.name) }
+async function submit() { await signIn(password.value); if (authenticated.value) { password.value = ''; showPassword.value = false } }
 </script>
 
 <template>
-  <main v-if="!authenticated" class="login-screen">
-    <div class="login-atmosphere" aria-hidden="true"><span></span><span></span><span></span></div>
-    <div class="login-panel"><div class="brand"><span class="brand-mark">H</span><span>Howie<span class="brand-light"> Monitor</span></span></div>
-      <p class="eyebrow">PERSONAL SYSTEM MONITOR</p><h1>看见电脑的<br><span>每一次变化。</span></h1><p class="login-description">性能、进程与硬件信息，集中在一个私人面板。</p>
-      <p v-if="initializing" class="muted" role="status">正在连接监控服务…</p>
-      <form v-else @submit.prevent="submit"><h2>{{ setupRequired ? '创建访问密码' : '欢迎回来' }}</h2><p class="muted">{{ setupRequired ? '首次使用，设置至少 12 位密码保护你的监控数据。' : '输入你的密码，查看电脑当前状态。' }}</p>
-        <label for="password">访问密码</label><input id="password" v-model="password" type="password" :autocomplete="setupRequired ? 'new-password' : 'current-password'" :minlength="setupRequired ? 12 : 1" maxlength="128" required autofocus>
-        <p v-if="error" class="error-message" role="alert">{{ error }}</p><button class="primary-button" :disabled="busy">{{ busy ? '连接中…' : setupRequired ? '设置密码并进入' : '进入监控面板' }} <span>→</span></button>
-      </form><p class="login-footer">HOWIE MONITOR / 私人设备 · 真实采样</p>
+  <main v-if="!authenticated" ref="pageRoot" class="login-screen">
+    <div class="login-panel" data-enter>
+      <div class="brand"><span class="brand-mark">H</span><span>Howie<span class="brand-light"> Monitor</span></span></div>
+      <h1>{{ setupRequired ? '设置访问密码' : '登录监控面板' }}</h1>
+      <p class="login-description">{{ setupRequired ? '首次使用，请设置至少 12 位密码。' : '查看电脑状态、进程与历史记录。' }}</p>
+      <p v-if="initializing" class="muted" role="status">正在连接服务…</p>
+      <form v-else @submit.prevent="submit">
+        <label for="password">访问密码</label>
+        <div class="password-field"><input id="password" v-model="password" :type="showPassword ? 'text' : 'password'" :autocomplete="setupRequired ? 'new-password' : 'current-password'" :minlength="setupRequired ? 12 : 1" maxlength="128" required autofocus><button type="button" :aria-pressed="showPassword" @click="showPassword = !showPassword">{{ showPassword ? '隐藏' : '显示' }}</button></div>
+        <p v-if="error" class="error-message" role="alert">{{ error }}</p>
+        <button class="primary-button" :disabled="busy">{{ busy ? '登录中…' : setupRequired ? '设置并登录' : '登录' }}</button>
+      </form>
     </div>
   </main>
   <div v-else class="app-shell">
-    <aside class="sidebar"><div class="brand"><span class="brand-mark">H</span><span>Howie<span class="brand-light"> Monitor</span></span></div><p class="nav-caption">工作空间</p>
-      <nav aria-label="主导航"><button v-for="item in nav" :key="item.key" :class="{ active: view === item.key }" @click="view = item.key"><span class="nav-icon">{{ item.icon }}</span>{{ item.title }}<span v-if="view === item.key" class="nav-current">●</span></button></nav>
-      <div class="sidebar-bottom"><div class="device-mini"><span class="device-symbol">▣</span><div><strong>{{ device?.name ?? '等待设备接入' }}</strong><small>{{ connectionStatus === 'online' ? '采集端已连接' : '采集端未连接' }}</small></div><span class="connection-dot" :class="{ online: connectionStatus === 'online' }"></span></div><button class="logout-button" :disabled="busy" @click="signOut">退出登录 <span>↗</span></button><span class="version">Howie Monitor · v0.1</span></div>
+    <a class="skip-link" href="#main-content" @click.prevent="skipToContent">跳到内容</a>
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark">H</span><span>Howie<span class="brand-light"> Monitor</span></span></div>
+      <button class="mobile-logout" :disabled="busy" @click="signOut">退出</button>
+      <nav aria-label="主导航"><button v-for="(item, index) in nav" :key="item.key" :class="{ active: view === item.key }" :aria-current="view === item.key ? 'page' : undefined" @click="view = item.key"><span class="nav-index" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span><span class="nav-full">{{ item.title }}</span><span class="nav-short">{{ item.short }}</span></button></nav>
+      <div class="sidebar-bottom"><div class="device-mini"><span class="connection-dot" :class="{ online: connectionStatus === 'online' }"></span><div><strong>{{ device?.name ?? '尚无电脑' }}</strong><small>{{ connectionStatus === 'online' ? '采集端在线' : '采集端离线' }}</small></div></div><button class="logout-button" :disabled="busy" @click="signOut">退出登录</button><span class="version">Howie Monitor · v0.1</span></div>
     </aside>
-    <div class="workspace"><header class="topbar"><span>设备监控 <span class="breadcrumb-slash">/</span> {{ nav.find(item => item.key === view)?.title }}</span><div class="topbar-right"><span class="status-badge" :class="{ fresh: dataStatus === 'fresh' }"><i></i>{{ statusLabel }}</span><span class="topbar-time">{{ time(latest?.sample?.sampledAt) }}</span><button class="mobile-logout" :disabled="busy" @click="signOut">退出</button></div></header>
-      <div class="page-content"><div class="page-heading"><div><p class="eyebrow">{{ view === 'overview' ? 'SYSTEM OVERVIEW' : view === 'detail' ? 'METRIC EXPLORER' : view === 'processes' ? 'PROCESS ACTIVITY' : view === 'history' ? 'HISTORY EXPLORER' : view === 'notifications' ? 'NOTIFICATION SETTINGS' : view === 'enrollment' ? 'COMPUTER CONNECTION' : 'DEVICE INVENTORY' }}</p><h1>{{ nav.find(item => item.key === view)?.title }}</h1><p class="page-description">{{ device?.name ?? '等待设备' }}<span class="separator">·</span>{{ device?.inventory.operatingSystem ?? '硬件信息尚未上报' }}</p></div><div class="uptime-block"><span>连续运行时间</span><strong>{{ uptime(latest?.sample?.uptimeSeconds) }}</strong></div></div>
-        <ComputerSelector :computers="computers" :selected-id="selectedComputerId" @select="selectComputer"/>
-        <div v-if="error" class="error-banner" role="alert">{{ error }} · 最后采集 {{ time(latest?.sample?.sampledAt) }}</div>
-        <div v-if="isStale && view !== 'history' && view !== 'notifications' && view !== 'enrollment'" class="state-banner" role="status">{{ statusLabel }}。{{ dataStatus === 'waiting' ? '采集端接入后会自动显示真实数据。' : '以下为最后一次采样，采集时间见右上角。' }} 连接状态：{{ connectionStatus === 'online' ? '已连接' : '未连接' }}。</div>
-        <div v-if="latest?.agent?.droppedSamples" class="state-banner">本地缓存已淘汰 {{ latest.agent.droppedSamples }} 个样本，历史可能存在空缺。</div>
-        <template v-if="view === 'overview'">
-          <div class="metric-grid"><MetricCard title="CPU" code="01" subtitle="全机逻辑处理器占用" :metric="cpu" :points="points(cpu)" color="#e8c58c" @select="choose(cpu)"/><MetricCard title="GPU" code="02" :subtitle="gpu?.name === 'D3D 3D' ? '3D 引擎占用' : 'GPU 核心占用'" :metric="gpu" :points="points(gpu)" color="#aeb7f1" @select="choose(gpu)"/><MetricCard title="内存" code="03" :subtitle="`${capacity(find('memory.used')?.value)} / ${capacity(find('memory.total')?.value)}`" :metric="memory" :points="points(memory)" color="#9adbc9" @select="choose(memory)"/><MetricCard title="磁盘" code="04" subtitle="首个物理盘活动时间" :metric="disk" :points="points(disk)" color="#9fbacf" @select="choose(disk)"/></div>
-          <section class="panel main-chart"><div class="panel-heading"><div><h2>性能变化</h2><p>最近 10 分钟 · 采样间隔约 2 秒</p></div><div class="chart-tabs"><button v-for="item in [{ label: 'CPU', metric: cpu }, { label: 'GPU', metric: gpu }, { label: '内存', metric: memory }, { label: '磁盘', metric: disk }]" :key="item.label" :class="{ active: item.metric && selected?.key === item.metric.key && selected?.deviceId === item.metric.deviceId }" :disabled="!item.metric" @click="activeMetric = item.metric">{{ item.label }}</button></div></div><div class="chart-plot"><div class="chart-axis"><span>100 %</span><span>50 %</span><span>0 %</span></div><TrendChart :points="chartPoints"/><div class="chart-time"><span>{{ time(chartPoints[0]?.sampledAt) }}</span><span>{{ time(chartPoints[chartPoints.length - 1]?.sampledAt) }}</span></div></div></section>
-          <div class="lower-grid"><section class="panel"><div class="panel-heading"><div><h2>主要占用进程 <span class="small-count">{{ latest?.sample?.processes.length ?? 0 }}</span></h2><p>实时工作集与 CPU 占用</p></div><button class="text-button" @click="view = 'processes'">查看全部 ↗</button></div><ProcessTable :processes="latest?.sample?.processes ?? []" compact/></section><section class="panel network-panel"><div class="panel-heading"><div><h2>网络活动</h2><p>各连接分别显示，流量不相加</p></div><span class="network-mark">↗↙</span></div><div v-for="network in networks" :key="network.id" class="network-row"><span>{{ network.name }}<small>{{ network.status === 'Up' ? '已连接' : '未连接' }}</small></span><div><span>↓ {{ networkValue(network.id, 'network.download') }}</span><span>↑ {{ networkValue(network.id, 'network.upload') }}</span></div></div><p v-if="!networks.length" class="empty-state">等待网络接口信息</p></section></div>
+    <main id="main-content" class="workspace" tabindex="-1">
+      <header class="topbar" :class="{ global: !devicePage }"><span>设备监控 <span class="separator">/</span> {{ title }}</span><div v-if="devicePage" class="topbar-right"><span class="status-badge" :class="{ fresh: dataStatus === 'fresh' }"><i></i>{{ statusLabel }}</span><time>{{ time(latest?.sample?.sampledAt) }}</time></div><span v-else class="muted">{{ view === 'history' ? '历史查询' : '所有电脑' }}</span></header>
+      <div ref="pageRoot" class="page-content">
+        <div class="page-heading" data-enter><div><h1 tabindex="-1">{{ title }}</h1><p class="page-description">{{ devicePage ? device?.inventory.operatingSystem ?? '选择电脑查看数据' : view === 'history' ? '按电脑、指标和时间查询。' : view === 'notifications' ? '所有电脑共用以下规则。' : '在 Windows 电脑上安装采集端。' }}</p></div><div v-if="devicePage && latest?.sample" class="uptime-block"><span>连续运行</span><strong>{{ uptime(latest.sample.uptimeSeconds) }}</strong></div></div>
+        <ComputerSelector v-if="devicePage" :computers="computers" :selected-id="selectedComputerId" @select="selectComputer" @enroll="view = 'enrollment'"/>
+        <div v-if="error" class="error-banner" role="alert">{{ error }}</div>
+        <div v-if="devicePage && dataStatus !== 'fresh' && latest?.sample" class="state-banner" role="status">{{ statusLabel }} · 以下为 {{ time(latest.sample.sampledAt) }} 的采样。<button class="text-button" @click="view = 'enrollment'">检查电脑接入</button></div>
+        <details v-if="devicePage && latest?.agent?.droppedSamples" class="help-details"><summary>历史存在空缺</summary><p>采集端缓存已淘汰 {{ latest.agent.droppedSamples }} 个样本。</p></details>
+
+        <section v-if="devicePage && !latest?.sample && view !== 'hardware'" class="panel welcome-state" data-enter><span class="empty-mark" aria-hidden="true">H</span><h2>{{ computers.length ? '等待这台电脑上报' : '添加你的第一台电脑' }}</h2><p>{{ computers.length ? '请确认采集端服务正在运行，收到数据后会自动更新。' : '安装 Windows 采集端后，即可查看运行状态。' }}</p><button class="primary-button" @click="view = 'enrollment'">{{ computers.length ? '查看接入步骤' : '添加电脑' }}</button><button v-if="computers.length" class="text-button" @click="view = 'history'">查看已有历史</button></section>
+        <template v-else-if="view === 'overview'">
+          <div class="metric-grid" data-enter><MetricCard title="CPU" code="01" subtitle="整机占用" :metric="cpu" :points="points(cpu)" color="#e8c58c" @select="choose(cpu)"/><MetricCard title="GPU" code="02" :subtitle="gpu?.name === 'D3D 3D' ? '3D 引擎占用' : '核心占用'" :metric="gpu" :points="points(gpu)" color="#aeb7f1" @select="choose(gpu)"/><MetricCard title="内存" code="03" :subtitle="capacity(find('memory.used')?.value) + ' / ' + capacity(find('memory.total')?.value)" :metric="memory" :points="points(memory)" color="#9adbc9" @select="choose(memory)"/><MetricCard title="磁盘" code="04" subtitle="首个物理盘活动时间" :metric="disk" :points="points(disk)" color="#9fbacf" @select="choose(disk)"/></div>
+          <section class="panel main-chart" data-enter><div class="panel-heading"><div><h2>性能变化</h2><p>最近 10 分钟 · 每 2 秒采样</p></div><div class="chart-tabs" aria-label="总览图表指标"><button v-for="item in overviewItems" :key="item.label" :class="{ active: overviewTab === item.label }" :aria-pressed="overviewTab === item.label" :disabled="!item.metric" @click="overviewTab = item.label">{{ item.label }}</button></div></div><TrendChart :key="overviewTab" :points="points(overviewSelected.metric)" :color="overviewSelected.color"/></section>
+          <div class="lower-grid" data-enter><section class="panel"><div class="panel-heading"><div><h2>主要占用进程</h2><p>{{ latest?.sample?.processes.length ?? 0 }} 个进程</p></div><button class="text-button" @click="view = 'processes'">查看全部</button></div><ProcessTable :processes="latest?.sample?.processes ?? []" compact/></section><section class="panel network-panel"><div class="panel-heading"><h2>网络活动</h2><span class="muted">{{ dataStatus === 'fresh' ? '当前采样' : '最后采样' }}</span></div><div v-for="network in device?.inventory.networks ?? []" :key="network.id" class="network-row"><span>{{ network.name }}</span><div><span>↓ {{ networkValue(network.id, 'network.download') }}</span><span>↑ {{ networkValue(network.id, 'network.upload') }}</span></div></div><p v-if="!device?.inventory.networks.length" class="empty-state">尚无网卡信息</p></section></div>
         </template>
-        <template v-else-if="view === 'detail'"><section class="panel detail-chart"><div class="panel-heading"><div><h2>{{ selected ? metricName(selected) : '选择一个指标' }}</h2><p>{{ selected ? groupName(groupId(selected)) : '' }} · 最近 10 分钟</p></div><strong class="detail-value">{{ metricValue(selected) }}</strong></div><TrendChart :points="chartPoints" :percent="selected?.unit === '%'"/><div class="chart-time"><span>{{ time(chartPoints[0]?.sampledAt) }}</span><span>{{ time(chartPoints[chartPoints.length - 1]?.sampledAt) }}</span></div></section>
-          <section v-for="group in detailGroups" :key="group" class="panel metric-detail-group"><h2>{{ groupName(group) }}</h2><div class="table-scroll"><table><thead><tr><th>指标</th><th>当前值</th><th>状态与原因</th><th>数据来源</th></tr></thead><tbody><tr v-for="metric in metrics.filter(item => groupId(item) === group)" :key="`${metric.deviceId}:${metric.key}`" :class="{ selected: selected?.key === metric.key && selected?.deviceId === metric.deviceId }"><td><button class="metric-link" @click="activeMetric = metric">{{ metricName(metric) }}</button></td><td>{{ metricValue(metric) }}</td><td>{{ statusText[metric.status] }}<small class="metric-reason">{{ metric.reason }}</small></td><td class="source-cell">{{ metric.source }}</td></tr></tbody></table></div></section>
+        <template v-else-if="view === 'detail'">
+          <section ref="detailChart" class="panel detail-chart" tabindex="-1" data-enter><div class="panel-heading"><div><h2>{{ selected ? metricName(selected) : '选择指标' }}</h2><p>{{ selected ? groupName(groupId(selected)) : '' }} · 最近 10 分钟</p></div><strong class="detail-value">{{ metricValue(selected) }}</strong></div><TrendChart :key="selected?.deviceId + ':' + selected?.key" :points="chartPoints" :percent="selected?.unit === '%'" :unit="selected?.unit ?? ''"/></section>
+          <div class="detail-tools" data-enter><label for="metric-search" class="sr-only">搜索指标</label><input id="metric-search" v-model="metricQuery" type="search" placeholder="搜索指标或硬件"><span class="muted">{{ filteredMetrics.length }} 个指标</span></div>
+          <details v-for="group in detailGroups" :key="group" class="panel metric-detail-group" open data-enter><summary>{{ groupName(group) }}<span>{{ filteredMetrics.filter(item => groupId(item) === group).length }} 项</span></summary><div class="metric-rows"><article v-for="metric in filteredMetrics.filter(item => groupId(item) === group)" :key="metric.deviceId + ':' + metric.key" class="metric-row" :class="{ selected: selected?.key === metric.key && selected?.deviceId === metric.deviceId }"><button class="metric-row-choice" :aria-pressed="selected?.key === metric.key && selected?.deviceId === metric.deviceId" @click="choose(metric)"><span>{{ metricName(metric) }}<small>{{ statusText[metric.status] }}</small></span><strong>{{ metricValue(metric) }}</strong></button><details class="metric-meta"><summary>来源{{ metric.reason ? '与原因' : '' }}</summary><p v-if="metric.reason">{{ metric.reason }}</p><p>{{ metric.source }}</p></details></article></div></details>
+          <p v-if="!detailGroups.length" class="empty-state">没有匹配的指标</p>
         </template>
-        <section v-else-if="view === 'processes'" class="panel full-process"><div class="panel-heading"><div><h2>全部进程</h2><p>{{ latest?.sample?.processes.length ?? 0 }} 个进程 · 只读查看</p></div></div><ProcessTable :processes="latest?.sample?.processes ?? []"/></section>
-        <HistoryView v-else-if="view === 'history'" :key="selectedComputerId" :device-id="selectedComputerId || undefined" :label="historyMetricLabel"/>
-        <NotificationsView v-else-if="view === 'notifications'" :device-id="device?.deviceId" :metrics="metrics" :label="historyMetricLabel"/>
-        <EnrollmentView v-else-if="view === 'enrollment'"/>
-        <template v-else><section class="panel hardware-panel"><h2>处理器与内存</h2><div v-for="processor in device?.inventory.cpus ?? []" :key="processor.id" class="hardware-item"><span>CPU</span><div><strong>{{ processor.name }}</strong><p>{{ processor.physicalCores }} 个物理核心 · {{ processor.logicalProcessors }} 个逻辑处理器</p></div></div><div class="hardware-item"><span>内存</span><strong>{{ capacity(find('memory.total')?.value) }}</strong></div></section><section class="panel hardware-panel"><h2>显示设备</h2><div v-for="adapter in device?.inventory.displayAdapters ?? []" :key="adapter.id" class="hardware-item"><span>{{ adapter.isHardwareGpu ? 'GPU' : '虚拟适配器' }}</span><div><strong>{{ adapter.name }}</strong><p>{{ adapter.vendor }}</p></div></div></section><section class="panel hardware-panel"><h2>物理磁盘与分区</h2><div v-for="drive in device?.inventory.physicalDisks ?? []" :key="drive.id" class="hardware-item"><span>物理盘 {{ drive.index }}</span><div><strong>{{ drive.name }}</strong><p>{{ capacity(drive.sizeBytes) }}</p></div></div><div v-for="volume in device?.inventory.volumes ?? []" :key="volume.id" class="hardware-item"><span>{{ volume.id }}</span><div><strong>{{ volume.fileSystem }} · {{ capacity(volume.sizeBytes) }}</strong><p>空闲 {{ capacity(metrics.find(metric => metric.key === 'volume.free' && metric.deviceId === volume.id)?.value ?? volume.freeBytes) }} · {{ volume.partitionIds.join('，') }}</p></div></div><p class="footnote">物理盘和分区容量分别记录，不重复相加。</p></section><section class="panel hardware-panel"><h2>采集能力</h2><div class="hardware-item"><span>运行权限</span><strong>{{ device?.sensors.isAdministrator ? '管理员' : '普通权限' }}</strong></div><div class="hardware-item"><span>PawnIO</span><strong>{{ device?.sensors.pawnIoDeviceAccessible ? '设备可访问' : '设备不可访问，相关传感器保留缺失状态' }}</strong></div></section></template>
-        <footer class="page-footer"><span>真实采样 · 缺失值保留空缺</span><span>最近采集耗时 {{ number(latest?.sample?.collectionMilliseconds) }} ms <span class="separator">·</span> 连接心跳 {{ time(latest?.lastHeartbeat) }}</span></footer>
+        <section v-else-if="view === 'processes'" class="panel full-process" data-enter><div class="panel-heading"><h2>全部进程</h2><span class="muted">只读查看</span></div><ProcessTable :processes="latest?.sample?.processes ?? []"/></section>
+        <HistoryView v-else-if="view === 'history'" :device-id="selectedComputerId || undefined" :label="historyMetricLabel"/>
+        <HardwareView v-else-if="view === 'hardware'" :device="device" :metrics="metrics" @enroll="view = 'enrollment'"/>
+        <div v-show="view === 'notifications' || view === 'enrollment'" data-enter>
+          <KeepAlive><NotificationsView v-if="view === 'notifications'" :metrics="metrics" :label="historyMetricLabel"/><EnrollmentView v-else-if="view === 'enrollment'"/></KeepAlive>
+        </div>
+        <footer v-if="devicePage && latest?.sample" class="page-footer"><span>采样 {{ time(latest.sample.sampledAt) }}</span><span>采集耗时 {{ number(latest.sample.collectionMilliseconds) }} ms · 心跳 {{ time(latest.lastHeartbeat) }}</span></footer>
       </div>
-    </div>
+    </main>
   </div>
 </template>
