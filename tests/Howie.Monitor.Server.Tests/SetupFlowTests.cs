@@ -59,6 +59,94 @@ public sealed class SetupFlowTests
         return Task.CompletedTask;
     });
 
+    [Fact]
+    public Task UninstallWelcomeHasIndependentStepsAndCopy() => OnUiThread(() =>
+    {
+        using var fixture = new Fixture((_, _) => throw new InvalidOperationException("卸载界面不应访问接入接口。"), uninstall: true);
+        var form = fixture.Form;
+        Assert.Contains("卸载向导", form.Text);
+        Assert.Equal(new[] { "01  卸载说明", "02  确认卸载", "03  正在卸载", "04  卸载完成" }, Field<List<Label>>(form, "_steps").Select(label => label.Text));
+        Assert.Equal("卸载采集端", Field<Label>(form, "_title").Text);
+        Assert.DoesNotContain("真实上报", Field<Label>(form, "_description").Text);
+        Assert.Equal("查看卸载选项", Field<Button>(form, "_next").Text);
+        AssertUninstallStep(form, 0);
+        return Task.CompletedTask;
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public Task UninstallProgressAndCompletionTrackTheRemovalTask(bool removeData) => OnUiThread(async () =>
+    {
+        var removal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        bool? requestedRemoval = null; int browserOpens = 0;
+        using var fixture = new Fixture((_, _) => throw new InvalidOperationException("不应访问接入接口。"),
+            open: _ => browserOpens++, uninstall: true, remove: (choice, _) => { requestedRemoval = choice; return removal.Task; });
+        Invoke(fixture.Form, "ShowStep", 1);
+        Field<CheckBox>(fixture.Form, "_removeData").Checked = removeData;
+        Task pending = Next(fixture.Form);
+        Assert.Equal(removeData, requestedRemoval);
+        AssertUninstallStep(fixture.Form, 2);
+        Assert.Equal("正在卸载", Field<Label>(fixture.Form, "_title").Text);
+        Assert.False(Field<Button>(fixture.Form, "_next").Enabled);
+        removal.SetResult(); await pending;
+        AssertUninstallStep(fixture.Form, 3);
+        Assert.Equal("卸载完成", Field<Label>(fixture.Form, "_title").Text);
+        Assert.Equal("关闭向导", Field<Button>(fixture.Form, "_next").Text);
+        Assert.True(Field<Button>(fixture.Form, "_next").Enabled);
+        await Next(fixture.Form);
+        Assert.True(fixture.Form.IsDisposed); Assert.Equal(0, browserOpens);
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public Task FailedOrCancelledRemovalReturnsToConfirmationAndPreservesTheChoice(bool cancelled) => OnUiThread(async () =>
+    {
+        Exception error = cancelled ? new System.ComponentModel.Win32Exception(1223) : new InvalidOperationException("卸载测试失败");
+        using var fixture = new Fixture((_, _) => throw new InvalidOperationException("不应访问接入接口。"),
+            uninstall: true, remove: (_, _) => Task.FromException(error));
+        Invoke(fixture.Form, "ShowStep", 1);
+        Field<CheckBox>(fixture.Form, "_removeData").Checked = true;
+        await Next(fixture.Form);
+        AssertUninstallStep(fixture.Form, 1);
+        Assert.True(Field<CheckBox>(fixture.Form, "_removeData").Checked);
+        Assert.Equal("确认卸载", Field<Label>(fixture.Form, "_title").Text);
+        Assert.True(Field<Button>(fixture.Form, "_next").Enabled);
+        Assert.Contains(cancelled ? "授权已取消" : "卸载测试失败", Field<Label>(fixture.Form, "_status").Text);
+        Assert.DoesNotContain("安装尚未完成", Field<Label>(fixture.Form, "_status").Text);
+    });
+
+    [Theory]
+    [InlineData(804, 581)]
+    [InlineData(1200, 800)]
+    public Task UninstallStepsRemainReadableAtDifferentWindowSizes(int width, int height) => OnUiThread(() =>
+    {
+        using var fixture = new Fixture((_, _) => throw new InvalidOperationException("不应访问接入接口。"), uninstall: true);
+        fixture.Form.ClientSize = new(width, height);
+        for (int step = 0; step <= 3; step++)
+        {
+            Invoke(fixture.Form, "ShowStep", step); fixture.Form.PerformLayout();
+            AssertUninstallStep(fixture.Form, step);
+            var content = Field<FlowLayoutPanel>(fixture.Form, "_content");
+            Assert.False(content.HorizontalScroll.Visible);
+            foreach (Control control in content.Controls) Assert.InRange(control.Right, 1, content.ClientSize.Width);
+            var next = Field<Button>(fixture.Form, "_next");
+            Assert.True(next.Parent!.ClientRectangle.Contains(next.Bounds));
+            Render(fixture.Form, $"uninstall-layout-{width}-step-{step + 1}.png");
+        }
+        return Task.CompletedTask;
+    });
+
+    private static void AssertUninstallStep(SetupForm form, int step)
+    {
+        Assert.Equal(step, Field<int>(form, "_step"));
+        var steps = Field<List<Label>>(form, "_steps");
+        Assert.Equal(4, steps.Count);
+        Assert.Same(steps[step], Assert.Single(steps, label => label.ForeColor == Color.FromArgb(154, 219, 201)));
+        Assert.False(Field<Button>(form, "_back").Visible); Assert.False(Field<Button>(form, "_rebind").Visible);
+    }
+
     [Theory]
     [InlineData(900, 640)]
     [InlineData(804, 581)]
@@ -350,15 +438,15 @@ public sealed class SetupFlowTests
         public SetupForm Form { get; }
         public int Installs { get; private set; }
         public InstallPlan? InstalledPlan { get; private set; }
-        public Fixture(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> send, bool serviceRunning = true, Exception? installError = null, Action<string>? open = null)
+        public Fixture(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> send, bool serviceRunning = true, Exception? installError = null, Action<string>? open = null, bool uninstall = false, Func<bool, CancellationToken, Task>? remove = null)
         {
             Directory.CreateDirectory(WorkRoot);
             var client = new SetupClient(new HttpClient(new Handler(send)) { BaseAddress = new(SetupPaths.ServerUrl) });
-            Form = new(false, client, (plan, _) =>
+            Form = new(uninstall, client, (plan, _) =>
             {
                 Installs++; InstalledPlan = plan;
                 return installError is null ? Task.CompletedTask : Task.FromException(installError);
-            }, () => serviceRunning, WorkRoot, open) { PreviewOnly = true, ShowInTaskbar = false, Opacity = 0 };
+            }, () => serviceRunning, WorkRoot, open, remove) { PreviewOnly = true, ShowInTaskbar = false, Opacity = 0 };
             Form.Show();
         }
         public void StageVerification()

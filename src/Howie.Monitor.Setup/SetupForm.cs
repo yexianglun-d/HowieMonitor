@@ -11,6 +11,7 @@ public sealed class SetupForm : Form
     private readonly SetupClient _client;
     private readonly Func<InstallPlan, CancellationToken, Task> _install;
     private readonly Func<bool> _serviceRunning;
+    private readonly Func<bool, CancellationToken, Task> _remove;
     private readonly Action<string> _open;
     private readonly string _workRoot;
     private readonly CancellationTokenSource _cancellation = new();
@@ -40,18 +41,21 @@ public sealed class SetupForm : Form
     private static readonly Color BackgroundColor = Color.FromArgb(16, 19, 19), PanelColor = Color.FromArgb(24, 28, 28), Accent = Color.FromArgb(154, 219, 201);
 
     public SetupForm(bool uninstall) : this(uninstall, new SetupClient(), Program.RunElevated, IsServiceRunning, SetupPaths.WorkRoot) { }
-    internal SetupForm(bool uninstall, SetupClient client, Func<InstallPlan, CancellationToken, Task> install, Func<bool> serviceRunning, string workRoot, Action<string>? open = null)
+    internal SetupForm(bool uninstall, SetupClient client, Func<InstallPlan, CancellationToken, Task> install, Func<bool> serviceRunning, string workRoot, Action<string>? open = null, Func<bool, CancellationToken, Task>? remove = null)
     {
-        _uninstall = uninstall; _client = client; _install = install; _serviceRunning = serviceRunning; _workRoot = workRoot; _open = open ?? Open;
+        _uninstall = uninstall; _client = client; _install = install; _serviceRunning = serviceRunning; _workRoot = workRoot; _open = open ?? Open; _remove = remove ?? RemoveInstalled;
         SuspendLayout();
-        Text = "Howie Monitor · 采集端安装向导"; ClientSize = new(900, 640); MinimumSize = new(820, 620);
+        Text = uninstall ? "Howie Monitor · 采集端卸载向导" : "Howie Monitor · 采集端安装向导"; ClientSize = new(900, 640); MinimumSize = new(820, 620);
         AutoScaleDimensions = new(96, 96); AutoScaleMode = AutoScaleMode.Dpi; BackColor = BackgroundColor; ForeColor = Color.FromArgb(230, 232, 228);
         Font = new("Microsoft YaHei UI", 10); StartPosition = FormStartPosition.CenterScreen;
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
         layout.ColumnStyles.Add(new(SizeType.Absolute, 220)); layout.ColumnStyles.Add(new(SizeType.Percent, 100)); Controls.Add(layout);
         var sidebar = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, BackColor = PanelColor, Padding = new(24, 32, 20, 24), Margin = Padding.Empty };
         sidebar.Controls.Add(new Label { AutoSize = true, Text = "Howie Monitor", Font = new(Font.FontFamily, 14, FontStyle.Bold), ForeColor = Accent, Margin = new(0, 0, 0, 32) });
-        foreach (string text in new[] { "01  欢迎使用", "02  环境检查", "03  绑定电脑", "04  确认安装", "05  安装服务", "06  接入验证", "07  接入完成" })
+        string[] steps = uninstall
+            ? ["01  卸载说明", "02  确认卸载", "03  正在卸载", "04  卸载完成"]
+            : ["01  欢迎使用", "02  环境检查", "03  绑定电脑", "04  确认安装", "05  安装服务", "06  接入验证", "07  接入完成"];
+        foreach (string text in steps)
         {
             var label = new Label { AutoSize = true, Text = text, Padding = new(0, 12, 0, 12), Margin = new(0, 0, 0, 4), ForeColor = Color.FromArgb(135, 146, 143) };
             sidebar.Controls.Add(label); _steps.Add(label);
@@ -124,10 +128,11 @@ public sealed class SetupForm : Form
         _step = step; _content.Controls.Clear(); _status.Text = _needsRebind ? new SetupCredentialException().Message : "";
         _back.Visible = !_uninstall && step is > 0 and < 6; _rebind.Visible = !_uninstall && step is >= 3 and <= 5;
         for (int i = 0; i < _steps.Count; i++) _steps[i].ForeColor = i == step ? Accent : Color.FromArgb(135, 146, 143);
+        if (_uninstall) { ShowUninstallStep(step); UpdateActions(); return; }
         switch (step)
         {
             case 0:
-                _title.Text = _uninstall ? "卸载采集端" : "接入你的电脑";
+                _title.Text = "接入你的电脑";
                 _description.Text = "从安装到真实上报，一步一步完成。";
                 TextLine("当前电脑：" + Environment.MachineName, true);
                 TextLine("采集 CPU、GPU、内存、磁盘、网络、可读取传感器与进程占用；通过 HTTPS 上传到你的私人面板。");
@@ -138,7 +143,7 @@ public sealed class SetupForm : Form
                 information.Controls.Add(Button("第三方许可", (_, _) => PackageContents.ShowNotices(this)));
                 foreach (Control button in information.Controls) button.Margin = Spacing(0, 0, 12, 0);
                 _content.Controls.Add(information);
-                _next.Text = _uninstall ? "查看卸载选项" : "开始检查"; break;
+                _next.Text = "开始检查"; break;
             case 1:
                 _title.Text = "环境检查"; _description.Text = "检查系统、安装位置与安全连接。";
                 TextLine("Windows 11 x64 与磁盘空间", true); TextLine("服务入口使用系统证书验证，证书或网络失败可重试。");
@@ -225,7 +230,7 @@ public sealed class SetupForm : Form
     private async Task Next()
     {
         if (_busy) return;
-        if (_step == 6)
+        if (_step == (_uninstall ? 3 : 6))
         {
             try { if (!_uninstall) _open(SetupPaths.ServerUrl); }
             catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
@@ -250,7 +255,7 @@ public sealed class SetupForm : Form
         }
         catch (OperationCanceledException) when (_pendingNavigation.HasValue) { }
         catch (SetupCredentialException ex) { _needsRebind = true; _status.Text = ex.Message; _activationProgress.Text = "设备激活：凭据失效，请重新绑定"; }
-        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223) { _status.Text = "管理员授权已取消，安装尚未完成。可重试安装，或点击“上一步”返回确认。"; }
+        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223) { _status.Text = _uninstall ? "管理员授权已取消，尚未卸载。可重新确认卸载。" : "管理员授权已取消，安装尚未完成。可重试安装，或点击“上一步”返回确认。"; }
         catch (HttpRequestException) { _status.Text = "HTTPS 网络或证书验证失败，请检查网络与电脑时间后重试。"; }
         catch (TaskCanceledException) { _status.Text = "连接超时，保留当前步骤，可重试。"; }
         catch (Exception ex) { _status.Text = ex is InvalidOperationException ? ex.Message : $"操作未完成（{ex.GetType().Name}），请重试或查看运行状态。"; }
@@ -411,22 +416,44 @@ public sealed class SetupForm : Form
         try { return service.Status == System.ServiceProcess.ServiceControllerStatus.Running; }
         catch (InvalidOperationException ex) when (ex.InnerException is System.ComponentModel.Win32Exception { NativeErrorCode: 1060 }) { return false; }
     }
+    private void ShowUninstallStep(int step)
+    {
+        switch (step)
+        {
+            case 0:
+                _title.Text = "卸载采集端"; _description.Text = "停止这台电脑的采集并移除后台服务。";
+                TextLine("当前电脑：" + Environment.MachineName, true);
+                TextLine("向导会移除 Howie Monitor 服务和安装文件。云端电脑与历史记录保留。");
+                TextLine("下一步可选择保留或删除本地配置与缓存。");
+                _next.Text = "查看卸载选项"; break;
+            case 1:
+                _title.Text = "确认卸载"; _description.Text = "停止并移除本产品后台服务，云端历史保留。";
+                TextLine("默认保留本地配置与缓存，便于重新安装。若选择删除，将在停止服务后删除本产品私有数据。其他软件与服务不受影响。");
+                _content.Controls.Add(_removeData); _next.Text = "确认卸载"; break;
+            case 2:
+                _title.Text = "正在卸载"; _description.Text = "正在请求管理员授权并处理卸载。";
+                TextLine("授权后将停止采集服务、移除服务和安装文件，请等待卸载结果。");
+                _next.Text = "正在卸载…"; break;
+            case 3:
+                _title.Text = "卸载完成"; _description.Text = "采集已停止，Windows 服务已移除。";
+                TextLine("云端历史没有删除。如有正在使用的安装文件，将在下次 Windows 启动时清理，无需现在重启。");
+                _next.Text = "关闭向导"; break;
+        }
+    }
     private async Task Uninstall()
     {
-        if (_step == 0)
-        {
-            InstallEngine.Existing(); _step = 1; _content.Controls.Clear(); _title.Text = "确认卸载";
-            _description.Text = "停止并移除本产品后台服务，云端历史保留。";
-            TextLine("默认保留本地配置与缓存，便于重新安装。若选择删除，将在停止服务后删除本产品私有数据。其他软件与服务不受影响。");
-            _content.Controls.Add(_removeData); _next.Text = "确认卸载"; return;
-        }
-        var start = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = true, Verb = "runas", Arguments = "--remove-installed " + (_removeData.Checked ? "remove-data" : "keep-data"), WindowStyle = ProcessWindowStyle.Hidden };
+        if (_step == 0) { InstallEngine.Existing(); ShowStep(1); return; }
+        ShowStep(2);
+        try { await _remove(_removeData.Checked, _cancellation.Token); }
+        catch { ShowStep(1); throw; }
+        ShowStep(3);
+    }
+    private static async Task RemoveInstalled(bool removeData, CancellationToken cancellationToken)
+    {
+        var start = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = true, Verb = "runas", Arguments = "--remove-installed " + (removeData ? "remove-data" : "keep-data"), WindowStyle = ProcessWindowStyle.Hidden };
         using var process = Process.Start(start) ?? throw new InvalidOperationException("卸载未启动。");
-        await process.WaitForExitAsync(_cancellation.Token);
+        await process.WaitForExitAsync(cancellationToken);
         if (process.ExitCode != 0) throw new InvalidOperationException("卸载未完成，请查看提示后重试。");
-        _step = 6; _content.Controls.Clear(); _title.Text = "卸载完成"; _description.Text = "采集已停止，Windows 服务已移除。";
-        TextLine("云端历史没有删除。正在使用的向导程序及其目录将在下次 Windows 启动时清理，无需现在重启。");
-        _next.Text = "关闭向导";
     }
     private static void Open(string address) => Process.Start(new ProcessStartInfo(address) { UseShellExecute = true });
     private sealed record SetupUiState(string ComputerName, InstallPlan Plan, string? PreviousComputer, DateTimeOffset? ExpiresAt = null);

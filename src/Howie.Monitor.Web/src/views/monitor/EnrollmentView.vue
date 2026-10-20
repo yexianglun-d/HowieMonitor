@@ -7,6 +7,7 @@ import { usePageMotion } from '../../composables/usePageMotion'
 import { useToast } from '../../composables/useToast'
 const { overview, download, code, loading, busy, error, refresh, generate, revoke } = useEnrollment()
 const toast = useToast()
+const uninstallCommand = String.raw`"%ProgramFiles%\HowieMonitor\HowieMonitorSetup.exe" --uninstall`
 const now = ref(Date.now()), replacing = ref(false), codePanel = ref<HTMLElement | null>(null)
 let clock: ReturnType<typeof setInterval> | undefined, disposed = false
 onMounted(() => { clock = setInterval(() => { now.value = Date.now() }, 1000) })
@@ -20,6 +21,10 @@ async function copyCode() {
   if (!code.value || !remaining.value) return
   try { await navigator.clipboard.writeText(code.value.code); if (!disposed) toast.success('绑定码已复制') }
   catch { if (!disposed) toast.error('复制失败，请长按绑定码手动复制。') }
+}
+async function copyUninstallCommand() {
+  try { await navigator.clipboard.writeText(uninstallCommand); if (!disposed) toast.success('卸载命令已复制，请在目标 Windows 电脑的“运行”窗口粘贴。') }
+  catch { if (!disposed) toast.error('复制失败，请手动选择并复制卸载命令。') }
 }
 async function generateCode() { replacing.value = false; await generate(); now.value = Date.now() }
 </script>
@@ -46,4 +51,20 @@ async function generateCode() { replacing.value = false; await generate(); now.v
       <ElCollapse class="help-details"><ElCollapseItem title="如何确认远程访问可用" name="details"><p>向导完成后，用手机移动网络打开本面板，检查电脑名称及数据是否更新。</p></ElCollapseItem></ElCollapse>
     </div></section>
   </template>
+  <section class="panel uninstall-guide" data-scroll-section="卸载采集端" aria-labelledby="uninstall-heading">
+    <div class="panel-heading"><div><h2 id="uninstall-heading">卸载采集端</h2><p>请在需要卸载的 Windows 电脑上操作。</p></div></div>
+    <ol><li>打开 Windows 设置 → 应用 → 已安装的应用，搜索 <strong>Howie</strong>，找到“Howie Monitor 采集端”后选择卸载。</li><li>找不到应用时，按 <kbd>Win + R</kbd>，粘贴下方命令，打开卸载向导。</li></ol>
+    <div class="uninstall-command"><code>{{ uninstallCommand }}</code><ElButton @click="copyUninstallCommand">复制卸载命令</ElButton></div>
+    <p class="footnote">向导默认保留本地配置和缓存，可自行选择删除。卸载会停止采集并移除 Windows 服务，云端历史仍保留。</p>
+    <ElCollapse class="help-details"><ElCollapseItem title="找不到应用或文件怎么办" name="missing"><p>设置中找不到时，也可在控制面板 → 程序 → 程序和功能中搜索 Howie。</p><p>此命令适用于安装向导安装的采集端。请检查 <code>%ProgramFiles%\HowieMonitor</code> 中是否有 <code>HowieMonitorSetup.exe</code>。旧版或脚本部署可能没有此文件，需要先核对服务的实际安装路径。</p></ElCollapseItem></ElCollapse>
+  </section>
 </template>
+<style scoped>
+.uninstall-guide ol { padding-left: 20px; color: var(--muted); font-size: 13px; line-height: 1.8 }
+.uninstall-guide li + li { margin-top: 8px }
+.uninstall-guide strong { color: #d9e2dd; font-weight: 500 }
+.uninstall-command { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 14px 16px; margin-block: 16px; background: #111815; border: 1px solid var(--border); border-radius: 7px }
+.uninstall-command code { flex: 1; min-width: 0; overflow-wrap: anywhere; user-select: all; font: 12px/1.8 var(--mono); color: #c6e2d4 }
+.uninstall-guide kbd { padding: 2px 5px; border: 1px solid var(--border); border-radius: 4px; font: 11px var(--mono) }
+@media (max-width: 700px) { .uninstall-command { gap: 10px; padding: 12px } .uninstall-command code { flex-basis: 100% } }
+</style>
