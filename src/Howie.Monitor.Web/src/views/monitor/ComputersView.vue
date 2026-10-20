@@ -7,7 +7,7 @@ import { temperatureAvailable, temperatureGroups, temperatureReason } from '../.
 import { gpuUsageAvailable, gpuUsageLabel } from '../../utils/gpus'
 
 const props = defineProps<{ computers: ComputerSummary[] }>()
-defineEmits<{ open: [id: string, page: 'overview' | 'notifications']; enroll: [] }>()
+defineEmits<{ open: [id: string, page: 'overview' | 'notifications']; enroll: []; remove: [computer: { deviceId: string; name: string }] }>()
 const query = ref(''), filter = ref('all')
 const online = computed(() => props.computers.filter(computer => computer.connectionStatus === 'online').length)
 const needsAttention = (computer: ComputerSummary) => computer.connectionStatus !== 'online' || computer.dataStatus !== 'fresh'
@@ -36,7 +36,7 @@ const temperatures = (computer: ComputerSummary) => temperatureGroups(computer.t
       <dl class="fleet-temperatures"><div v-for="group in temperatures(computer)" :key="group.id" :title="temperatureAvailable(group.primary) ? group.hardware : temperatureReason(group)"><dt>{{ group.title }}<small v-if="group.primary">{{ group.hardware }}</small></dt><dd>{{ temperatureAvailable(group.primary) ? number(group.primary.value) + ' °C' : '—' }}</dd></div></dl>
       <div class="fleet-space"><span>{{ computer.lowestSpaceVolume ? computer.lowestSpaceVolume + ' 可用空间' : '可用空间' }}</span><strong>{{ computer.lowestSpaceBytes == null ? '—' : capacity(computer.lowestSpaceBytes) }}</strong></div>
       <p class="muted fleet-sampled">{{ computer.sampledAt ? '最后采样 ' + sampled(computer.sampledAt) : '尚无采样' }}</p>
-      <footer class="fleet-card-actions"><ElButton type="primary" @click="$emit('open', computer.deviceId, 'overview')">查看详情</ElButton><ElButton @click="$emit('open', computer.deviceId, 'notifications')">提醒规则</ElButton></footer>
+      <footer class="fleet-card-actions"><ElButton type="primary" @click="$emit('open', computer.deviceId, 'overview')">查看详情</ElButton><ElButton @click="$emit('open', computer.deviceId, 'notifications')">提醒规则</ElButton><ElButton type="danger" link class="fleet-remove" @click="$emit('remove', { deviceId: computer.deviceId, name: computer.name })">移除电脑</ElButton></footer>
     </article>
   </div>
   <section v-if="!filtered.length" class="panel empty-state"><p>{{ computers.length ? '没有匹配的电脑' : '尚未接入电脑' }}</p><ElButton v-if="!computers.length" type="primary" @click="$emit('enroll')">添加第一台电脑</ElButton></section>
@@ -71,5 +71,6 @@ dd { margin: 5px 0 0; font-family: var(--mono); font-variant-numeric: tabular-nu
 .fleet-sampled { margin-top: 16px }
 .fleet-card-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 17px }
 .fleet-card-actions :deep(.el-button + .el-button) { margin-left: 0 }
+.fleet-card-actions :deep(.fleet-remove.el-button) { margin-left: auto }
 @media (max-width: 700px) { .fleet-tools { gap: 12px } .fleet-tools :deep(.el-input) { width: 100%; order: 3 } .fleet-filters { min-width: 0 } .fleet-filters button { padding-inline: 9px } .fleet-usage dd { font-size: 20px } }
 </style>

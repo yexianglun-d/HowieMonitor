@@ -25,6 +25,8 @@ builder.Services.AddSingleton(new TelemetryStore(dataDirectory));
 builder.Services.AddHostedService<HistoryMaintenanceWorker>();
 builder.Services.AddSingleton<TerminalBroker>();
 builder.Services.AddHostedService<TerminalMaintenanceWorker>();
+builder.Services.AddSingleton<ComputerRemoval>();
+builder.Services.AddHostedService<ComputerRemovalWorker>();
 builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(dataDirectory, "keys")));
 builder.Services.AddSingleton(provider => new NotificationStore(dataDirectory, provider.GetRequiredService<IDataProtectionProvider>(),
     provider.GetRequiredService<TelemetryStore>().Computers(DateTimeOffset.UtcNow).Select(computer => computer.DeviceId).ToArray()));
@@ -187,10 +189,22 @@ viewing.MapGet("/notifications/computer", (string? computerId, NotificationStore
 viewing.MapPut("/notifications/computer", (string? computerId, ComputerNotificationUpdate update, NotificationStore store, TelemetryStore telemetry) =>
 {
     if (computerId is null || !ValidComputerId(computerId)) return Results.BadRequest(new { error = "请选择有效电脑。" });
-    if (telemetry.Device(computerId) is null) return Results.NotFound(new { error = "电脑尚未接入。" });
-    string? error = store.UpdateComputer(computerId, update);
-    return error is null ? Results.Ok(store.ViewComputer(computerId)) : Results.BadRequest(new { error });
+    IResult result = Results.NotFound(new { error = "电脑尚未接入或正在移除。" });
+    telemetry.WithComputer(computerId, _ =>
+    {
+        string? error = store.UpdateComputer(computerId, update);
+        result = error is null ? Results.Ok(store.ViewComputer(computerId)) : Results.BadRequest(new { error });
+    });
+    return result;
 }).AddEndpointFilter(Csrf);
+viewing.MapDelete("/computers/{id}", (string id, [Microsoft.AspNetCore.Mvc.FromBody] ComputerRemovalRequest request, CredentialStore credentials, ComputerRemoval removal) =>
+{
+    if (!ValidComputerId(id)) return Results.BadRequest(new { error = "电脑标识不正确。" });
+    if (!credentials.VerifyPassword(request.Password)) return Results.Json(new { error = "面板密码不正确。" }, statusCode: 403);
+    try { removal.Remove(id); return Results.NoContent(); }
+    catch (Exception error) when (error is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
+    { return Results.Problem("移除尚未完成，请重试；已开始的清理会自动继续。", statusCode: 503); }
+}).AddEndpointFilter(Csrf).RequireRateLimiting("login");
 viewing.MapGet("/computers", (TelemetryStore store) => Results.Ok(store.Computers(DateTimeOffset.UtcNow)));
 viewing.MapGet("/device", (string? computerId, TelemetryStore store) =>
 {

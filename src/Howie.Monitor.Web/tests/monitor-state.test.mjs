@@ -63,6 +63,38 @@ test('logout prevents an in-flight computer response from restoring private tele
   } finally { h.close() }
 })
 
+test('removing the selected computer rejects its late snapshot and selects a remaining computer', async () => {
+  const pending = deferred(); let remaining = computers
+  const h = await harness({ getComputers: async () => remaining,
+    getDevice: id => id === 'first' ? pending.promise : Promise.resolve({ deviceId: id, name: id }) })
+  try {
+    const initial = h.start(); await tick()
+    remaining = computers.filter(computer => computer.deviceId !== 'first')
+    h.monitor.forgetComputer('first'); await tick()
+    pending.resolve({ deviceId: 'first', name: 'first' }); await initial; await tick()
+    assert.equal(h.monitor.selectedComputerId.value, 'second')
+    assert.equal(h.monitor.device.value.deviceId, 'second')
+    assert.equal(h.monitor.computers.value.length, 1)
+    assert.deepEqual(h.historyCalls, ['second'])
+  } finally { h.close() }
+})
+
+test('removing another computer preserves the selection and removing the last clears every snapshot', async () => {
+  let remaining = computers
+  const h = await harness({ getComputers: async () => remaining })
+  try {
+    await h.start(); remaining = [computers[0]]
+    h.monitor.forgetComputer('second'); await tick()
+    assert.equal(h.monitor.selectedComputerId.value, 'first')
+    assert.equal(h.monitor.latest.value.sample.deviceId, 'first')
+    remaining = []; h.monitor.forgetComputer('first'); await tick()
+    assert.equal(h.monitor.selectedComputerId.value, '')
+    assert.equal(h.monitor.device.value, null); assert.equal(h.monitor.latest.value, null)
+    assert.equal(Object.keys(h.monitor.history.value).length, 0)
+    assert.equal(h.monitor.connectionError.value, '')
+  } finally { h.close() }
+})
+
 test('a missing explicit computer never falls back to another computers telemetry', async () => {
   const h = await harness({}, 'missing')
   try {

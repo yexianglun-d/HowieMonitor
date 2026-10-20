@@ -28,7 +28,7 @@ public sealed class NotificationWorkerTests : IDisposable
         var handler = new SlowHandler(); using var sender = new ServerChanSender(handler);
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
             { ["public-url"] = "https://monitor.example" }).Build();
-        using var worker = new NotificationWorker(notifications, sender, NullLogger<NotificationWorker>.Instance);
+        using var worker = new NotificationWorker(notifications, sender, telemetry, NullLogger<NotificationWorker>.Instance);
         using var evaluation = new NotificationEvaluationWorker(notifications, telemetry, configuration, NullLogger<NotificationEvaluationWorker>.Instance);
         using var publishing = new CancellationTokenSource();
         var publisher = Task.Run(async () =>

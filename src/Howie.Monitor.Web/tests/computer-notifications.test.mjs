@@ -13,7 +13,7 @@ const rule = { id: 'test-rule', name: '磁盘空间', enabled: true, kind: 'metr
 const response = (id, rules = []) => ({ computerId: id, rules, events: [] })
 
 async function harness(overrides = {}) {
-  const id = vue.ref('first'), lifecycle = {}, feedback = [], saved = new Map(), payloads = []
+  const id = vue.ref('first'), removed = vue.ref([]), lifecycle = {}, feedback = [], saved = new Map(), payloads = []
   const persist = (computerId, rules) => { saved.set(computerId, structuredClone(rules)); return response(computerId, saved.get(computerId)) }
   const api = { getComputerNotifications: async computerId => response(computerId, saved.get(computerId) ?? []),
     saveComputerNotifications: async (computerId, rules) => { payloads.push({ computerId, rules }); return overrides.save ? overrides.save(computerId, rules, persist) : persist(computerId, rules) }, ...overrides.api }
@@ -23,8 +23,8 @@ async function harness(overrides = {}) {
     : name === '../../../api/notifications' ? api : { useToast: () => Object.fromEntries(['success', 'error'].map(kind => [kind, message => feedback.push({ kind, message })])) },
     AbortController, structuredClone, Error, setTimeout: () => 1, clearTimeout() {}, window: { addEventListener() {}, removeEventListener() {} } }
   vm.runInNewContext(code, sandbox)
-  const state = scope.run(() => sandbox.exports.useComputerNotifications(() => id.value)); lifecycle.mount(); await tick()
-  return { id, state, lifecycle, feedback, payloads, close() { lifecycle.unmount(); scope.stop() } }
+  const state = scope.run(() => sandbox.exports.useComputerNotifications(() => id.value, () => removed.value)); lifecycle.mount(); await tick()
+  return { id, removed, state, lifecycle, feedback, payloads, close() { lifecycle.unmount(); scope.stop() } }
 }
 
 test('late rule loads cannot populate another computer even if abort is ignored', async () => {
@@ -96,6 +96,23 @@ test('logout disposal rejects late saves and emits no private feedback', async (
   h.state.current.value.rules.push({ ...rule }); const saving = h.state.save(); h.close()
   pending.resolve(response('first', [rule])); await saving
   assert.equal(h.feedback.length, 0)
+})
+
+test('removal discards only the owning draft and rejects a late save even while the view is cached', async () => {
+  const pending = deferred(), h = await harness({ save: () => pending.promise })
+  try {
+    h.state.current.value.rules.push({ ...rule }); const saving = h.state.save()
+    h.id.value = 'second'; await tick(); h.state.current.value.rules.push({ ...rule, name: 'second-draft' })
+    h.lifecycle.deactivate(); h.removed.value = ['first']
+    pending.resolve(response('first', [rule])); await saving
+    assert.equal(h.feedback.length, 0)
+    assert.equal(h.state.current.value.rules[0].name, 'second-draft')
+    h.id.value = 'first'; await tick(); h.lifecycle.activate(); await tick()
+    assert.equal(h.state.current.value.rules.length, 0); assert.equal(h.state.current.value.ready, false)
+    await h.state.save(); assert.equal(h.payloads.length, 1)
+    h.id.value = 'second'; await tick()
+    assert.equal(h.state.current.value.rules[0].name, 'second-draft'); assert.equal(h.state.dirty.value, true)
+  } finally { h.close() }
 })
 
 test('the real fleet cards keep identical sensor identities partitioned by computer', async () => {

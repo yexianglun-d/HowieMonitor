@@ -18,3 +18,8 @@ export async function login(password: string, setup: boolean) {
   await refreshCsrf()
 }
 export async function logout() { await refreshCsrf(); await request('/api/auth/logout', { method: 'POST' }); await refreshCsrf() }
+
+export async function removeComputer(computerId: string, password: string, signal: AbortSignal) {
+  await refreshCsrf()
+  return request<void>(`/api/computers/${encodeURIComponent(computerId)}`, { method: 'DELETE', body: JSON.stringify({ password }), signal })
+}

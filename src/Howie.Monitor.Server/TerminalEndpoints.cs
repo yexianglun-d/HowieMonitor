@@ -20,10 +20,14 @@ public static class TerminalEndpoints
             if (!ValidComputer(request.ComputerId) || !TerminalProtocol.ValidSize(request.Columns, request.Rows))
                 return Results.BadRequest(new { error = "目标电脑或终端尺寸不正确。" });
             if (!credentials.VerifyPassword(request.Password)) return Results.Json(new { error = "面板密码不正确。" }, statusCode: 403);
-            if (telemetry.Device(request.ComputerId) is null) return Results.NotFound(new { error = "目标电脑不存在。" });
-            var result = broker.Create(request.ComputerId, context.User.FindFirstValue("stamp")!, request.Columns, request.Rows, DateTimeOffset.UtcNow);
-            return result.Session is null ? Results.Conflict(new { error = result.Error })
-                : Results.Ok(new TerminalSessionCreated(result.Session.Id, result.Session.ConnectBefore));
+            IResult response = Results.NotFound(new { error = "目标电脑不存在或正在移除。" });
+            telemetry.WithComputer(request.ComputerId, _ =>
+            {
+                var result = broker.Create(request.ComputerId, context.User.FindFirstValue("stamp")!, request.Columns, request.Rows, DateTimeOffset.UtcNow);
+                response = result.Session is null ? Results.Conflict(new { error = result.Error })
+                    : Results.Ok(new TerminalSessionCreated(result.Session.Id, result.Session.ConnectBefore));
+            });
+            return response;
         }).AddEndpointFilter(csrf).RequireRateLimiting("login");
         viewing.MapDelete("/sessions/{id}", (string id, string? computerId, HttpContext context, TerminalBroker broker) =>
             !ValidComputer(computerId) ? Results.BadRequest(new { error = "请选择目标电脑。" })
@@ -33,7 +37,9 @@ public static class TerminalEndpoints
         {
             if (!ValidComputer(computerId) || !SameOrigin(context, hosting)) { context.Response.StatusCode = 403; return; }
             if (!context.WebSockets.IsWebSocketRequest) { context.Response.StatusCode = 400; return; }
-            var session = broker.ClaimBrowser(id, computerId!, context.User.FindFirstValue("stamp")!, DateTimeOffset.UtcNow);
+            TerminalSession? session = null;
+            context.RequestServices.GetRequiredService<TelemetryStore>().WithComputer(computerId!, _ =>
+                session = broker.ClaimBrowser(id, computerId!, context.User.FindFirstValue("stamp")!, DateTimeOffset.UtcNow));
             if (session is null) { context.Response.StatusCode = 404; return; }
             try
             {
@@ -49,14 +55,17 @@ public static class TerminalEndpoints
             if (actor is null) return Results.Unauthorized();
             if (!ValidCapability(capability) || actor.Value.AgentSessionId != capability.AgentSessionId)
                 return Results.BadRequest(new { error = "终端采集端身份不正确。" });
-            return Results.Ok(new TerminalPollResponse(broker.Poll(actor.Value.DeviceId, capability, DateTimeOffset.UtcNow)));
+            IResult response = Results.Unauthorized();
+            telemetry.WithComputer(actor.Value.DeviceId, _ => response = Results.Ok(new TerminalPollResponse(broker.Poll(actor.Value.DeviceId, capability, DateTimeOffset.UtcNow))));
+            return response;
         });
         app.MapGet("/api/ingest/terminal/sessions/{id}/socket", async (string id, HttpContext context, TelemetryStore telemetry, TerminalBroker broker) =>
         {
             var actor = telemetry.AuthorizeTerminal(context.Request.Headers.Authorization, DateTimeOffset.UtcNow);
             if (actor is null) { context.Response.StatusCode = 401; return; }
             if (!context.WebSockets.IsWebSocketRequest) { context.Response.StatusCode = 400; return; }
-            var session = broker.ClaimAgent(id, actor.Value.DeviceId, actor.Value.AgentSessionId, DateTimeOffset.UtcNow);
+            TerminalSession? session = null;
+            telemetry.WithComputer(actor.Value.DeviceId, _ => session = broker.ClaimAgent(id, actor.Value.DeviceId, actor.Value.AgentSessionId, DateTimeOffset.UtcNow));
             if (session is null) { context.Response.StatusCode = 404; return; }
             try
             {

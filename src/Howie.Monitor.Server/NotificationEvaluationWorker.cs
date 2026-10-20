@@ -15,9 +15,8 @@ public sealed class NotificationEvaluationWorker(NotificationStore notifications
                 var now = DateTimeOffset.UtcNow;
                 foreach (var computer in telemetry.Computers(now))
                 {
-                    var device = telemetry.Device(computer.DeviceId);
-                    var view = telemetry.Latest(now, computer.DeviceId);
-                    notifications.Evaluate(device, view, now, started, publicUrl);
+                    telemetry.WithComputer(computer.DeviceId, device =>
+                        notifications.Evaluate(device, telemetry.Latest(now, computer.DeviceId), now, started, publicUrl));
                 }
             }
             catch (IOException) { logger.LogWarning("通知规则状态保存失败，下一轮重新检查。"); }

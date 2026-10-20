@@ -6,8 +6,14 @@
 @import 'element-plus/theme-chalk/el-collapse.css';
 @import 'element-plus/theme-chalk/el-descriptions.css';
 @import 'element-plus/theme-chalk/el-empty.css';
+@import 'element-plus/theme-chalk/el-dialog.css';
+@import 'element-plus/theme-chalk/el-overlay.css';
 @import 'element-plus/theme-chalk/el-input.css';
 @import 'element-plus/theme-chalk/el-select.css';
+@import 'element-plus/theme-chalk/el-scrollbar.css';
+@import 'element-plus/theme-chalk/el-popper.css';
+@import 'element-plus/theme-chalk/el-option.css';
+@import 'element-plus/theme-chalk/el-option-group.css';
 @import 'element-plus/theme-chalk/el-skeleton.css';
 @import 'element-plus/theme-chalk/el-switch.css';
 @import 'element-plus/theme-chalk/el-tag.css';
@@ -38,7 +44,7 @@ html.dark {
 .el-button + .el-button { margin-left: 0 }
 .el-input, .el-select { min-width: 0; width: 100% }
 /* ElInput 的外框已有焦点反馈，内层不重复绘制一圈错位轮廓。 */
-.el-input .el-input__inner:focus-visible { outline: none }
+.el-input .el-input__inner:focus-visible, .el-select .el-select__input:focus-visible { outline: none }
 .el-collapse { --el-collapse-header-bg-color: transparent; --el-collapse-content-bg-color: transparent; border: 0 }
 .el-collapse-item__header { font-weight: 500; text-align: left; line-height: 1.6; height: auto; min-height: 44px }
 .el-collapse-item__wrap { border: 0 }

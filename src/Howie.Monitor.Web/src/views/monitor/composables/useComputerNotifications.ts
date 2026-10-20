@@ -4,8 +4,8 @@ import type { AlertRule, AlertEvent, ComputerNotificationView } from '../../../t
 import { useToast } from '../../../composables/useToast'
 
 interface Draft { rules: AlertRule[]; events: AlertEvent[]; saved: string; ready: boolean; loading: boolean; busy: boolean; error: string; saveError: string }
-export function useComputerNotifications(computerId: () => string) {
-  const drafts = new Map<string, Draft>(), toast = useToast(), writes = new Set<AbortController>()
+export function useComputerNotifications(computerId: () => string, removedIds: () => readonly string[] = () => []) {
+  const drafts = reactive(new Map<string, Draft>()), toast = useToast(), writes = new Map<AbortController, string>()
   const draftFor = (id: string) => {
     if (!drafts.has(id)) drafts.set(id, reactive({ rules: [], events: [], saved: '[]', ready: false, loading: false, busy: false, error: '', saveError: '' }))
     return drafts.get(id)!
@@ -23,7 +23,7 @@ export function useComputerNotifications(computerId: () => string) {
   }
   async function refresh() {
     const id = computerId(), draft = draftFor(id), currentGeneration = generation
-    if (!id || !active) return
+    if (!id || !active || removedIds().includes(id)) return
     controller?.abort(); const request = new AbortController(); controller = request
     draft.loading = !draft.ready
     try {
@@ -41,9 +41,9 @@ export function useComputerNotifications(computerId: () => string) {
   }
   async function save() {
     const id = computerId(), draft = draftFor(id)
-    if (!id || !draft.ready || draft.busy) return
+    if (!id || !draft.ready || draft.busy || removedIds().includes(id)) return
     stop()
-    const request = new AbortController(); writes.add(request); draft.busy = true; draft.saveError = ''
+    const request = new AbortController(); writes.set(request, id); draft.busy = true; draft.saveError = ''
     // 保存捕获电脑及其草稿；中途切换只更新原电脑，不能覆盖当前电脑。
     try {
       const value = await api.saveComputerNotifications(id, draft.rules.map(rule => ({ ...rule })), request.signal)
@@ -54,9 +54,16 @@ export function useComputerNotifications(computerId: () => string) {
   function stop() { generation++; controller?.abort(); clearTimeout(timer) }
   function beforeUnload(event: BeforeUnloadEvent) { if ([...drafts.values()].some(changed)) { event.preventDefault(); event.returnValue = '' } }
   watch(computerId, () => { stop(); void refresh() }, { immediate: true, flush: 'sync' })
+  watch(removedIds, ids => {
+    for (const id of ids) {
+      for (const [request, owner] of writes) if (owner === id) request.abort()
+      drafts.delete(id)
+    }
+    if (ids.includes(computerId())) stop()
+  }, { flush: 'sync' })
   onMounted(() => window.addEventListener('beforeunload', beforeUnload))
   onDeactivated(() => { active = false; stop() })
   onActivated(() => { if (!active) { active = true; void refresh() } })
-  onUnmounted(() => { stop(); for (const request of writes) request.abort(); window.removeEventListener('beforeunload', beforeUnload) })
+  onUnmounted(() => { stop(); for (const request of writes.keys()) request.abort(); window.removeEventListener('beforeunload', beforeUnload) })
   return { current, dirty, refresh, save }
 }

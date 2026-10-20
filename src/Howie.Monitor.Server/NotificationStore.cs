@@ -93,6 +93,21 @@ public sealed class NotificationStore
         }
     }
 
+    public void RemoveComputer(string computerId)
+    {
+        lock (_gate)
+        {
+            var previous = _data;
+            _data = JsonSerializer.Deserialize<NotificationData>(JsonSerializer.Serialize(_data, ProtocolJson.Options), ProtocolJson.Options)!;
+            _data.ComputerRules.Remove(computerId);
+            string prefix = JsonSerializer.Serialize(new[] { computerId }, ProtocolJson.Options)[..^1] + ",";
+            foreach (string key in _data.States.Keys.Where(key => key.StartsWith(prefix, StringComparison.Ordinal)).ToArray()) _data.States.Remove(key);
+            _data.Events.RemoveAll(value => value.ComputerId == computerId);
+            try { Save(); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { _data = previous; throw; }
+        }
+    }
+
     public string? Update(NotificationUpdate update)
     {
         string? error = AlertRules.Validate(update);

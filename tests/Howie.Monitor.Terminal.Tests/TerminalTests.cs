@@ -62,6 +62,17 @@ public sealed class TerminalTests
         Assert.Null(_broker.Create("second", "owner", 1, 1, _now).Session);
         Assert.False(session.Closed);
     }
+    [Fact] public async Task MaintenanceNeverHoldsTheBrokerLockWhileCallingOtherStores()
+    {
+        var session = Create();
+        await Task.Run(() => _broker.Sweep(_now, _ => true, id =>
+        {
+            // 模拟另一个线程先持有遥测锁、再读取终端；回调若仍持有终端锁，此处会超时。
+            var status = Task.Run(() => _broker.Status(id, _now)).WaitAsync(TimeSpan.FromSeconds(2)).GetAwaiter().GetResult();
+            Assert.True(status.Available); return _capability.AgentSessionId;
+        })).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(session.Closed);
+    }
     [Theory]
     [InlineData("login")]
     [InlineData("agent")]

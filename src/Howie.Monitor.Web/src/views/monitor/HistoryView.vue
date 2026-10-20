@@ -8,6 +8,7 @@ import { capacity, number, rate } from '../../utils/format'
 import type { HistoryMetric, HistoryBucketPoint } from '../../types/monitor'
 
 const props = defineProps<{ deviceId?: string; label: (metric: HistoryMetric) => string }>()
+defineEmits<{ remove: [computer: { deviceId: string; name: string | null }] }>()
 const { computers, selectedComputerId, selectedComputer, computerLoading, metrics, selectedId, hours, selectedMetric, catalogLoading, loading, processLoading, error, processError, series,
   processes, selectedPoint, observedPoints, identity, loadComputers, selectPoint } = useHistory(() => props.deviceId)
 const formatDate = (value: string | null | undefined) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '—'
@@ -35,10 +36,11 @@ const tablePoints = computed(() => [...observedPoints.value].reverse())
 
 <template>
   <section class="panel history-controls" data-enter>
-    <div class="history-field"><label for="history-computer">查询电脑</label><ElSelect id="history-computer" v-model="selectedComputerId" :disabled="computerLoading || !computers.length"><ElOption v-for="computer in computers" :key="computer.deviceId" :value="computer.deviceId" :label="(computer.name ?? '未记录名称') + ' · ' + (computer.deviceId === props.deviceId ? '最近查看' : '查询电脑 · ' + computer.deviceId.slice(-8))"/></ElSelect></div>
-    <div class="history-field"><label for="history-metric">指标</label><ElSelect filterable id="history-metric" v-model="selectedId" :disabled="catalogLoading || !metrics.length"><ElOption v-for="metric in metrics" :key="identity(metric)" :value="identity(metric)" :label="metricLabel(metric) + ' · ' + metric.unit"/></ElSelect></div>
+    <div class="history-field"><label for="history-computer">查询电脑</label><ElSelect fit-input-width id="history-computer" v-model="selectedComputerId" :disabled="computerLoading || !computers.length"><ElOption v-for="computer in computers" :key="computer.deviceId" :value="computer.deviceId" :label="(computer.name ?? '未记录名称') + ' · ' + (computer.deviceId === props.deviceId ? '最近查看' : '查询电脑 · ' + computer.deviceId.slice(-8))"/></ElSelect></div>
+    <div class="history-field"><label for="history-metric">指标</label><ElSelect filterable fit-input-width id="history-metric" v-model="selectedId" :disabled="catalogLoading || !metrics.length"><ElOption v-for="metric in metrics" :key="identity(metric)" :value="identity(metric)" :label="metricLabel(metric) + ' · ' + metric.unit"/></ElSelect></div>
     <div class="history-ranges" aria-label="历史时间范围"><button v-for="range in [{ hours: 1, label: '最近 1 小时' }, { hours: 24, label: '最近 24 小时' }, { hours: 168, label: '最近 7 天' }]" :key="range.hours" :class="{ active: hours === range.hours }" @click="hours = range.hours">{{ range.label }}</button></div>
     <ElButton type="primary" link :disabled="loading || catalogLoading || computerLoading" @click="loadComputers">刷新</ElButton>
+    <ElButton type="danger" link :disabled="!selectedComputer || computerLoading" @click="selectedComputer && $emit('remove', { deviceId: selectedComputer.deviceId, name: selectedComputer.name })">移除所选电脑</ElButton>
   </section>
   <p v-if="selectedComputer && selectedComputer.deviceId !== props.deviceId" class="state-banner" role="status">正在查看 {{ selectedComputer.name ?? '未记录名称的电脑' }} 的历史。保留期内记录：{{ formatDate(selectedComputer.firstSampleAt) }} — {{ formatDate(selectedComputer.lastSampleAt) }}；不代表该电脑当前仍在上报。</p>
   <p v-if="computerLoading || catalogLoading || loading" class="empty-state" role="status">正在查询历史数据…</p>

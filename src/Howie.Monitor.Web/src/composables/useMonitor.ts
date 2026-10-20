@@ -78,6 +78,11 @@ export function useMonitor(initialComputerId = '') {
       }
     }
   }
+  function forgetComputer(id: string) {
+    stop(); computerSnapshots.value = computerSnapshots.value.filter(computer => computer.deviceId !== id)
+    if (selectedComputerId.value === id) { selectedComputerId.value = ''; clearComputer(); connectionError.value = '' }
+    void poll()
+  }
   async function signIn(password: string) {
     busy.value = true; authError.value = ''
     try { await api.login(password, setupRequired.value); authenticated.value = true; setupRequired.value = false; stop(); await poll() }
@@ -99,5 +104,5 @@ export function useMonitor(initialComputerId = '') {
     finally { initializing.value = false }
   })
   onUnmounted(() => { stop(); clearInterval(clock); document.removeEventListener('visibilitychange', visibility) })
-  return { computers, selectedComputerId, selectComputer, authenticated, setupRequired, initializing, computerLoading, busy, error, connectionError, device, latest, metrics, history, activeMetric, dataStatus, connectionStatus, cpu, gpus, memory, disk, signIn, signOut, find }
+  return { computers, selectedComputerId, selectComputer, authenticated, setupRequired, initializing, computerLoading, busy, error, connectionError, device, latest, metrics, history, activeMetric, dataStatus, connectionStatus, cpu, gpus, memory, disk, signIn, signOut, forgetComputer, find }
 }

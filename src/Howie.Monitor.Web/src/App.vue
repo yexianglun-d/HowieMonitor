@@ -20,13 +20,15 @@ import HardwareView from './views/monitor/HardwareView.vue'
 import ComputerSelector from './views/monitor/components/ComputerSelector.vue'
 import TemperaturePanel from './views/monitor/components/TemperaturePanel.vue'
 import ComputersView from './views/monitor/ComputersView.vue'
+import RemoveComputerDialog from './views/monitor/components/RemoveComputerDialog.vue'
 import type { Metric, HistoryMetric } from './types/monitor'
 
 const TerminalView = defineAsyncComponent(() => import('./views/monitor/TerminalView.vue'))
 const initial = readLocation(window.location.hash)
-const { computers, selectedComputerId, selectComputer, authenticated, setupRequired, initializing, computerLoading, busy, error, connectionError, device, latest, metrics, history, activeMetric, dataStatus, connectionStatus, cpu, gpus, memory, disk, signIn, signOut, find } = useMonitor(initial.query.get('computer') ?? '')
+const { computers, selectedComputerId, selectComputer, authenticated, setupRequired, initializing, computerLoading, busy, error, connectionError, device, latest, metrics, history, activeMetric, dataStatus, connectionStatus, cpu, gpus, memory, disk, signIn, signOut, forgetComputer, find } = useMonitor(initial.query.get('computer') ?? '')
 const toast = useToast()
 const password = ref(''), view = ref(initial.page), pageRoot = ref<HTMLElement | null>(null), viewRoot = ref<HTMLElement | null>(null)
+const removalTarget = ref<{ deviceId: string; name: string | null } | null>(null), removedComputerIds = ref<string[]>([]), historyRevision = ref(0)
 const overviewTab = ref('CPU'), metricQuery = ref(''), detailChart = ref<HTMLElement | null>(null)
 const nav = [{ key: 'computers', title: '电脑总览', short: '电脑' }, { key: 'overview', title: '运行总览', short: '总览' }, { key: 'detail', title: '指标详情', short: '指标' }, { key: 'processes', title: '进程列表', short: '进程' }, { key: 'history', title: '历史记录', short: '历史' }, { key: 'hardware', title: '硬件信息', short: '硬件' }, { key: 'notifications', title: '通知设置', short: '通知' }, { key: 'terminal', title: '远程终端', short: '终端' }, { key: 'enrollment', title: '电脑接入', short: '接入' }] as const
 const title = computed(() => nav.find(item => item.key === view.value)!.title)
@@ -65,10 +67,16 @@ watch(view, async page => {
   window.scrollTo({ top: 0, behavior: 'instant' })
   pageRoot.value?.querySelector<HTMLElement>('h1')?.focus({ preventScroll: true })
 })
-watch(selectedComputerId, id => { if (id) replaceQuery({ computer: id }); overviewTab.value = 'CPU' })
-watch(authenticated, () => toast.clear())
+watch(selectedComputerId, id => { replaceQuery({ computer: id || null }); overviewTab.value = 'CPU' })
+watch(authenticated, value => { toast.clear(); if (!value) { removalTarget.value = null; removedComputerIds.value = [] } })
 function points(metric: Metric | null) { return metric ? history.value[metric.deviceId + ':' + metric.key] ?? [] : [] }
 function choose(metric: Metric | null) { if (!metric) return; activeMetric.value = metric; view.value = 'detail'; void locateChart() }
+function removedComputer(id: string) {
+  removedComputerIds.value = [...removedComputerIds.value, id]; historyRevision.value++
+  const location = readLocation(window.location.hash)
+  if (location.query.get('historyComputer') === id) replaceQuery({ historyComputer: null, metric: null })
+  forgetComputer(id)
+}
 function showTemperatures() { metricQuery.value = '温度'; view.value = 'detail' }
 function openComputer(id: string, page: 'overview' | 'notifications') { selectComputer(id); view.value = page }
 async function locateChart() {
@@ -136,7 +144,7 @@ async function logout() { await signOut(); if (authenticated.value && error.valu
         <ElCollapse class="help-details" v-if="devicePage && latest?.agent?.droppedSamples"><ElCollapseItem title="历史存在空缺" name="details"><p>采集端缓存已淘汰 {{ latest.agent.droppedSamples }} 个样本。</p></ElCollapseItem></ElCollapse>
 
         <div ref="viewRoot" class="view-content" :data-view="view">
-        <ComputersView v-if="view === 'computers'" :computers="computers" @open="openComputer" @enroll="view = 'enrollment'"/>
+        <ComputersView v-if="view === 'computers'" :computers="computers" @remove="computer => removalTarget = computer" @open="openComputer" @enroll="view = 'enrollment'"/>
         <section v-else-if="devicePage && computerLoading" class="panel computer-loading" aria-busy="true" aria-label="正在读取电脑信息"><ElSkeleton :rows="6"/></section>
         <section v-else-if="devicePage && !latest?.sample && view !== 'hardware'" class="panel welcome-state" data-enter><span class="empty-mark" aria-hidden="true">H</span><h2>{{ computers.length ? '等待这台电脑上报' : '添加你的第一台电脑' }}</h2><p>{{ computers.length ? '请确认采集端服务正在运行，收到数据后会自动更新。' : '安装 Windows 采集端后，即可查看运行状态。' }}</p><ElButton type="primary" @click="view = 'enrollment'">{{ computers.length ? '查看接入步骤' : '添加电脑' }}</ElButton><ElButton type="primary" link v-if="computers.length" @click="view = 'history'">查看已有历史</ElButton></section>
         <template v-else-if="view === 'overview'">
@@ -152,17 +160,18 @@ async function logout() { await signOut(); if (authenticated.value && error.valu
           <p v-if="!detailGroups.length" class="empty-state">没有匹配的指标</p>
         </template>
         <section v-else-if="view === 'processes'" class="panel full-process" data-enter><div class="panel-heading"><h2>全部进程</h2><span class="muted">只读查看</span></div><ProcessTable :processes="latest?.sample?.processes ?? []"/></section>
-        <HistoryView v-else-if="view === 'history'" :device-id="selectedComputerId || undefined" :label="historyMetricLabel"/>
+        <HistoryView v-else-if="view === 'history'" :key="historyRevision" @remove="computer => removalTarget = computer" :device-id="selectedComputerId || undefined" :label="historyMetricLabel"/>
         <HardwareView v-else-if="view === 'hardware'" :device="device" :metrics="metrics" :data-status="dataStatus" @select="choose" @temperatures="showTemperatures" @enroll="view = 'enrollment'"/>
         <TerminalView v-else-if="view === 'terminal'" :key="selectedComputerId" :computer-id="selectedComputerId" :computer-name="device?.name ?? computers.find(computer => computer.deviceId === selectedComputerId)?.name ?? ''" @enroll="view = 'enrollment'"/>
         <div v-show="view === 'notifications' || view === 'enrollment'" class="settings-content" data-enter>
-          <KeepAlive><NotificationsView v-if="view === 'notifications'" :computer-id="selectedComputerId" :computer-name="device?.name ?? computers.find(computer => computer.deviceId === selectedComputerId)?.name ?? ''" :metrics="metrics" :label="historyMetricLabel"/><EnrollmentView v-else-if="view === 'enrollment'"/></KeepAlive>
+          <KeepAlive><NotificationsView v-if="view === 'notifications'" :removed-computer-ids="removedComputerIds" :computer-id="selectedComputerId" :computer-name="device?.name ?? computers.find(computer => computer.deviceId === selectedComputerId)?.name ?? ''" :metrics="metrics" :label="historyMetricLabel"/><EnrollmentView v-else-if="view === 'enrollment'"/></KeepAlive>
         </div>
         </div>
         <footer v-if="devicePage && latest?.sample" class="page-footer"><span>采样 {{ time(latest.sample.sampledAt) }}</span><span>采集耗时 {{ number(latest.sample.collectionMilliseconds) }} ms · 心跳 {{ time(latest.lastHeartbeat) }}</span></footer>
       </div>
     </main>
   </div>
+  <RemoveComputerDialog v-if="authenticated" :target="removalTarget" @close="removalTarget = null" @removed="removedComputer"/>
   <ToastHost/>
   </ElConfigProvider>
 </template>

@@ -7,9 +7,9 @@ import { useNotifications } from './composables/useNotifications'
 import { useComputerNotifications } from './composables/useComputerNotifications'
 import { ruleUnit, ruleInput, ruleValue } from '../../utils/notificationUnits'
 import { number } from '../../utils/format'
-const props = defineProps<{ computerId: string; computerName: string; metrics: Metric[]; label: (metric: HistoryMetric) => string }>()
+const props = defineProps<{ computerId: string; computerName: string; removedComputerIds?: readonly string[]; metrics: Metric[]; label: (metric: HistoryMetric) => string }>()
 const { settings, events, requestsToday, budgetDate, sendKey, clearCredential, loading, ready, busy, dirty, error, save, test, refresh } = useNotifications()
-const { current: computer, dirty: rulesDirty, refresh: refreshRules, save: saveRules } = useComputerNotifications(() => props.computerId)
+const { current: computer, dirty: rulesDirty, refresh: refreshRules, save: saveRules } = useComputerNotifications(() => props.computerId, () => props.removedComputerIds ?? [])
 const choice = ref('__offline')
 watch(() => props.computerId, () => { choice.value = '__offline' })
 const metricId = (metric: HistoryMetric) => JSON.stringify([metric.key, metric.deviceId, metric.unit])
@@ -41,7 +41,7 @@ const date = (value: string) => new Date(value).toLocaleString('zh-CN', { hour12
       <section class="panel notification-panel">
         <div class="panel-heading"><div><h2>{{ computerName || '当前电脑' }} · 提醒规则 <span class="small-count">{{ computer.rules.length }} / 20</span></h2><p>仅对这台电脑生效。条件持续满足后发送一次。</p><p class="footnote">{{ computerId }}</p></div></div>
         <p v-if="!settings.enabled" class="muted">全局发送尚未开启，保存规则后还需开启通知。</p>
-        <div class="notification-add"><label for="alert-metric" class="sr-only">新增提醒项目</label><ElSelect filterable id="alert-metric" v-model="choice"><ElOption value="__offline" label="停止上报"/><ElOption v-for="metric in choices" :key="metricId(metric)" :value="metricId(metric)" :label="props.label(metric) + ' · ' + ruleUnit(metric.unit)"/></ElSelect><ElButton :disabled="computer.rules.length >= 20" @click="addRule">添加规则</ElButton></div>
+        <div class="notification-add"><label for="alert-metric" class="sr-only">新增提醒项目</label><ElSelect filterable fit-input-width id="alert-metric" v-model="choice"><ElOption value="__offline" label="停止上报"/><ElOption v-for="metric in choices" :key="metricId(metric)" :value="metricId(metric)" :label="props.label(metric) + ' · ' + ruleUnit(metric.unit)"/></ElSelect><ElButton :disabled="computer.rules.length >= 20" @click="addRule">添加规则</ElButton></div>
         <p v-if="!computer.rules.length" class="empty-state">这台电脑还没有提醒规则。</p>
         <fieldset v-for="(rule, index) in computer.rules" :key="rule.id" class="notification-rule">
           <legend>{{ index + 1 }}. {{ rule.kind === 'offline' ? '停止上报' : rule.name }}</legend>

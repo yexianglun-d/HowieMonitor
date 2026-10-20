@@ -2,6 +2,10 @@
 
 ## 下次继续
 
+- 当前新增待部署变更：彻底移除电脑及通知下拉框修复。入口在电脑总览卡片和历史记录；确认框展示名称/完整 ID，复验面板密码。生产仍是下方记录的 `05e985a`，不要把本地验证当成已上线。
+- 清理调用链：`ComputerRemoval.cs` -> `TelemetryRemoval.cs`（先落标记和撤权）-> `TerminalBroker.RemoveComputer` -> `NotificationStore.RemoveComputer` -> SQLite 全部目标行。`ComputerRemovalWorker` 自动续清失败任务；`WithComputer` 保护迟到的通知写入/观察和终端创建/领取，避免清理后重建。保留空 enrollment_active 行及迁移标记，禁止启动时重新导入已撤销引导凭据。
+- 浏览器证据：`output/computer-removal-20261020/`，仅内置浏览器、本地明确标注样本，检查移除确认/取消和通知/历史下拉。没有在浏览器实际移除线上或验证实例电脑；真实 DELETE、CSRF、密码和旧凭据 401 由临时 Kestrel 集成测试验证。
+- 验证更新：前端 54 项，跨平台服务端子集 81 项（新增 ComputerRemovalTests.cs），终端含真实 HTTP/WS 27 项，Python 20 项均通过。终端 Sweep 的校验回调在锁外执行，并有跨线程锁回归测试。Windows 原完整 Server.Tests 仍需 Windows 运行；本轮不涉及采集端或安装包修改。
 - 管理员终端应用 `05e985a` 已于北京时间 2026-10-20 17:44 部署，新版未签名安装包已更新至受保护下载页。默认关闭，没有自动升级/授权目标电脑。下一步在目标 Windows 11 上重新下载安装包，运行修复/升级并显式勾选本机终端授权，再做真实提权、PowerShell 交互与退出清理验收；不能只凭服务器部署成功声明这些已验证。
 - 用户已选择当前已登录的管理员账号，不保存 Windows 密码，注销后不可用。授权绑定安装账号 SID；必须有真实提升令牌，拒绝 SYSTEM/服务身份；切换电脑或离开终端页结束会话，断线不重连、不重放输入。逐项验收步骤见 `docs/terminal-acceptance.md`。
 - 关键代码：Contracts `Terminal.cs`；Server `TelemetryTerminal.cs`、`TerminalBroker.cs`、`TerminalEndpoints.cs`；Agent `AdminTerminalIdentity.cs`、`WindowsAdminTerminal.cs`、`TerminalWorker.cs`；Web `TerminalView.vue`、`useTerminal.ts` 与 API。终端视图按电脑 ID 销毁重建，不能仅 reset xterm 后保留异步输出队列。

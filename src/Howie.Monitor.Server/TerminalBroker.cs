@@ -147,20 +147,35 @@ public sealed class TerminalBroker(ILogger<TerminalBroker> logger)
     }
     public void Sweep(DateTimeOffset now, Func<string, bool> validSession, Func<string, string?> currentAgentSession)
     {
+        TerminalSession[] sessions;
+        lock (_gate) sessions = _sessions.Values.Where(session => !session.Closed).ToArray();
+        // 回调会访问凭据和遥测；不能在终端锁内执行，避免与创建/移除电脑的锁顺序相反。
+        var authority = sessions.Select(session => (Session: session, ValidOwner: validSession(session.Id), AgentSession: currentAgentSession(session.ComputerId))).ToArray();
         lock (_gate)
         {
-            foreach (var session in _sessions.Values.Where(session => !session.Closed))
+            foreach (var observed in authority)
             {
+                var session = observed.Session;
+                if (session.Closed) continue;
                 _computers.TryGetValue(session.ComputerId, out var presence);
                 if (!Fresh(presence, now)) End(session, "目标电脑的终端连接已中断");
-                else if (!validSession(session.Id)) End(session, "网页登录已失效");
-                else if (currentAgentSession(session.ComputerId) != session.AgentSessionId) End(session, "采集端身份已变更");
+                else if (!observed.ValidOwner) End(session, "网页登录已失效");
+                else if (observed.AgentSession != session.AgentSessionId) End(session, "采集端身份已变更");
                 else if (!session.Ready && now > session.ConnectBefore) End(session, "建立终端连接超时");
                 else if (now - session.CreatedAt > TimeSpan.FromHours(1) || session.Idle(now)) End(session, "终端会话已超时");
             }
             foreach (string id in _sessions.Where(pair => pair.Value.Closed && now - pair.Value.CreatedAt > TimeSpan.FromMinutes(2)).Select(pair => pair.Key).ToArray())
                 _sessions.Remove(id);
             foreach (string id in _computers.Where(pair => now - pair.Value.SeenAt > TimeSpan.FromMinutes(2)).Select(pair => pair.Key).ToArray()) _computers.Remove(id);
+        }
+    }
+    public void RemoveComputer(string computerId)
+    {
+        lock (_gate)
+        {
+            foreach (var session in _sessions.Values.Where(value => value.ComputerId == computerId).ToArray())
+            { End(session, "这台电脑已移除"); _sessions.Remove(session.Id); }
+            _computers.Remove(computerId);
         }
     }
     public bool ValidOwner(string id, CredentialStore credentials)

@@ -48,6 +48,8 @@ public sealed class TerminalSocketTests
             }
             Assert.True(healthy, process.HasExited ? await stderr : "server startup timed out");
             Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync($"/api/terminal/status?computerId={deviceId}", token)).StatusCode);
+            using (var anonymous = await client.SendAsync(new(HttpMethod.Delete, $"/api/computers/{deviceId}") { Content = JsonContent.Create(new { password }) }, token))
+                Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
             async Task Csrf()
             {
                 using var response = await client.GetAsync("/api/auth/csrf", token); response.EnsureSuccessStatusCode();
@@ -118,6 +120,23 @@ public sealed class TerminalSocketTests
                 using (var logout = await client.PostAsync("/api/auth/logout", null, token)) logout.EnsureSuccessStatusCode();
                 Assert.Null(await TerminalProtocol.Receive(agent, token)); Assert.Null(await TerminalProtocol.Receive(browser, token));
             }
+            await Csrf();
+            using (var login = await client.PostAsJsonAsync("/api/auth/login", new { password }, token)) login.EnsureSuccessStatusCode();
+            await Csrf();
+            using (var wrong = await client.SendAsync(new(HttpMethod.Delete, $"/api/computers/{deviceId}") { Content = JsonContent.Create(new { password = "wrong" }) }, token))
+                Assert.Equal(HttpStatusCode.Forbidden, wrong.StatusCode);
+            Assert.NotNull(telemetry.Device(deviceId));
+            client.DefaultRequestHeaders.Remove("X-CSRF-TOKEN");
+            using (var noCsrf = await client.SendAsync(new(HttpMethod.Delete, $"/api/computers/{deviceId}") { Content = JsonContent.Create(new { password }) }, token))
+                Assert.Equal(HttpStatusCode.BadRequest, noCsrf.StatusCode);
+            await Csrf();
+            using (var removed = await client.SendAsync(new(HttpMethod.Delete, $"/api/computers/{deviceId}") { Content = JsonContent.Create(new { password }) }, token))
+                Assert.Equal(HttpStatusCode.NoContent, removed.StatusCode);
+            Assert.Null(telemetry.Device(deviceId));
+            using (var revokedPoll = await agentHttp.PostAsJsonAsync("/api/ingest/terminal/poll", capability, token))
+                Assert.Equal(HttpStatusCode.Unauthorized, revokedPoll.StatusCode);
+            using (var staleRules = await client.PutAsJsonAsync($"/api/notifications/computer?computerId={deviceId}", new ComputerNotificationUpdate([]), token))
+                Assert.Equal(HttpStatusCode.NotFound, staleRules.StatusCode);
         }
         finally
         {
