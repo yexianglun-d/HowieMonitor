@@ -2,7 +2,7 @@
 
 ## 下次继续
 
-- 当前新增待部署变更：彻底移除电脑及通知下拉框修复。入口在电脑总览卡片和历史记录；确认框展示名称/完整 ID，复验面板密码。生产仍是下方记录的 `05e985a`，不要把本地验证当成已上线。
+- 彻底移除电脑及通知下拉框修复 `2c0a840` 已于北京时间 2026-10-20 18:29 部署并推送。入口在电脑总览卡片和历史记录；确认框展示名称/完整 ID，复验面板密码。本次没有删除任何生产电脑；不要使用真实电脑随意做删除验收。
 - 清理调用链：`ComputerRemoval.cs` -> `TelemetryRemoval.cs`（先落标记和撤权）-> `TerminalBroker.RemoveComputer` -> `NotificationStore.RemoveComputer` -> SQLite 全部目标行。`ComputerRemovalWorker` 自动续清失败任务；`WithComputer` 保护迟到的通知写入/观察和终端创建/领取，避免清理后重建。保留空 enrollment_active 行及迁移标记，禁止启动时重新导入已撤销引导凭据。
 - 浏览器证据：`output/computer-removal-20261020/`，仅内置浏览器、本地明确标注样本，检查移除确认/取消和通知/历史下拉。没有在浏览器实际移除线上或验证实例电脑；真实 DELETE、CSRF、密码和旧凭据 401 由临时 Kestrel 集成测试验证。
 - 验证更新：前端 54 项，跨平台服务端子集 81 项（新增 ComputerRemovalTests.cs），终端含真实 HTTP/WS 27 项，Python 20 项均通过。终端 Sweep 的校验回调在锁外执行，并有跨线程锁回归测试。Windows 原完整 Server.Tests 仍需 Windows 运行；本轮不涉及采集端或安装包修改。
@@ -28,7 +28,10 @@
 
 ## 当前部署
 
-- 当前 `/opt/howie-monitor/current` 指向 `/opt/howie-monitor/releases/20261020-05e985a`，上一个应用为 `20261020-7ab7225`。容器、镜像、数据目录保持原样。部署记录位于服务器 `/opt/howie-monitor/staging/deploy-terminal-20261020/`，本地脚本和非敏感验证结果在 `.local/deploy-terminal-20261020/`。
+- 当前 `/opt/howie-monitor/current` 指向 `/opt/howie-monitor/releases/20261020-2c0a840`，上一个应用为 `20261020-05e985a`。容器、镜像、数据目录、安装包及 Nginx 配置保持原样。新记录位于服务器 `/opt/howie-monitor/staging/deploy-removal-20261020/`，本地脚本和非敏感结果在 `.local/deploy-removal-20261020/`。
+- 新备份 `/opt/howie-monitor/backups/monitor-20261020-102352.tar.gz` 已完整恢复校验，SHA-256 `2faa578c8d32494a3d77ee8164aeee752dced5b7737f47b4471036a6841e9f8b`；备份停服约 19.88 秒，切换约 2.9 秒。4 台电脑/注册信息/凭据、通知规则和密钥保留；公网 5 个页面资源哈希一致，原 3 个受保护接口和新删除接口未登录均为 401。真实采样序号 37054、距验收约 1.7 秒，已写入历史，待删除队列为空。
+- 隔离发布包演练覆盖双电脑同名/同采样身份、规则隔离、删除密码/CSRF、关闭活动终端、旧凭据失效、重启后另一台保留、删除最后一台后再次重启不导回旧凭据且可生成新绑定码；临时无网络容器和数据已清理。内置浏览器线上读取仍超时，未做生产截图复核，不以本地截图冒充线上证据。
+- 下面的终端部署是历史记录：`05e985a` 上一个应用为 `20261020-7ab7225`，记录位于 `/opt/howie-monitor/staging/deploy-terminal-20261020/` 与 `.local/deploy-terminal-20261020/`。
 - 新安装包 SHA-256 `38de5397bd7753622718bfdc221845d3a5891dc340596c85be5c9760207d6b8c`，93,930,303 字节，仍未签名；旧安装包保留在服务器本次 staging 的 `pre-switch/HowieMonitorSetup.exe`，原 SHA-256 为 `f196467e416e5e310afc51b4c9fe7736f0ffd3129ef75554593f4e7ca3372a49`。Nginx 原配置保留为 `nginx-before.conf`，只新增了两个终端 socket 路径的 Upgrade 转发。
 - 本次部署前备份为 `/opt/howie-monitor/backups/monitor-20261020-093415.tar.gz`，SHA-256 `9face49499f103c311ce5b99441861bc7eeb35b95a5d1a9fb2527d6cd7fdca3a`，已做隔离恢复校验。不要下载其中生产数据库/凭据到本地。
 - 发布包在无网络容器中通过终端协议验证；临时容器和数据已清理。线上 5 个公网资源哈希、3 个保护接口及 WS 代理检查通过，真实采样/历史继续写入；通知规则、登录密码哈希、设备凭据、密钥保留。本轮未执行生产终端命令，也未主动发送通知。内置浏览器新线上标签仍超时，生产截图验收未完成。
