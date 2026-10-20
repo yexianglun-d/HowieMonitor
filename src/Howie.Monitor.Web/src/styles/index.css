@@ -4,6 +4,8 @@
   color: #e6ece8; background: #101414; font-size: 14px; line-height: 1.6; font-synthesis: none; color-scheme: dark;
   --panel: #191e1d; --border: #303936; --muted: #a2b0aa; --accent: #9adbc9;
   --mono: "SFMono-Regular", Consolas, "Microsoft YaHei UI", monospace;
+  --content-width: 1500px; --page-inset: 32px; --page-top: 32px; --panel-inset: 24px; --section-gap: 20px;
+  --control-height: 40px; --motion-fast: 140ms; --motion-normal: 220ms; --ease-out: cubic-bezier(.22, .61, .36, 1);
 }
 * { box-sizing: border-box }
 body { margin: 0 }
@@ -33,8 +35,8 @@ strong { font-weight: 550 }
 .sidebar { display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; padding: 28px 16px; background: #141918; border-right: 1px solid var(--border); z-index: 20 }
 .sidebar .brand { margin: 0 4px 44px }
 nav { display: flex; flex-direction: column; gap: 5px }
-nav button { display: flex; align-items: center; gap: 13px; min-height: 46px; text-align: left; padding: 10px 14px; border-radius: 7px; color: #aab8b0; font-size: 14px; position: relative }
-nav button:hover { background: #202923 }
+nav button { display: flex; align-items: center; gap: 13px; min-height: 46px; text-align: left; padding: 10px 14px; border-radius: 7px; color: #aab8b0; font-size: 14px; position: relative; transition: color var(--motion-fast) ease, background-color var(--motion-fast) ease }
+@media (hover: hover) and (pointer: fine) { nav button:hover { background: #202923 } }
 nav button.active { color: #d8eee2; background: #263c31 }
 nav button.active::before { content: ""; position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px; border-radius: 3px; background: var(--accent) }
 .nav-index { font: 11px var(--mono); color: #8eaaa0 }
@@ -49,30 +51,31 @@ nav button.active::before { content: ""; position: absolute; left: 0; top: 14px;
 .logout-button { text-align: left; width: 100%; min-height: 44px; color: var(--muted); font-size: 13px }
 .version { color: #99aaa0; font-size: 11px }
 .workspace { min-width: 0 }
-.topbar { height: 64px; padding: 0 32px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 12px }
+.topbar { height: 64px; padding-block: 0; padding-inline: max(var(--page-inset), calc((100% - var(--content-width)) / 2 + var(--page-inset))); display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 12px }
 .topbar-right { display: flex; gap: 18px; align-items: center }
 .topbar time, .detail-value, .metric-number { font-family: var(--mono); font-variant-numeric: tabular-nums }
 .separator { padding: 0 10px; color: #81988b }
 .status-badge { display: inline-flex; align-items: center; gap: 7px; padding: 4px 9px; border: 1px solid #6d6041; border-radius: 6px; color: #e4c88d; font-size: 12px; white-space: nowrap; line-height: 1.6 }
 .status-badge i { width: 5px; height: 5px; border-radius: 50%; background: currentColor }
 .status-badge.fresh { color: #afe4ce; border-color: #416451; background: #20342a }
-.page-content { max-width: 1500px; margin: auto; padding: 30px 32px }
-.page-heading { display: flex; justify-content: space-between; align-items: center; gap: 18px; margin-bottom: 22px }
+.page-content { display: grid; gap: var(--section-gap); max-width: var(--content-width); margin: auto; padding: var(--page-top) var(--page-inset) 32px }
+.view-content, .settings-content, .notification-form { display: grid; align-content: start; gap: var(--section-gap); min-width: 0 }
+.page-heading { display: flex; justify-content: space-between; align-items: center; gap: 18px; min-height: 68px }
 .page-heading h1 { font-size: 29px; font-weight: 550; letter-spacing: -.5px; line-height: 1.4; margin-bottom: 5px }
 .page-description { color: var(--muted); font-size: 13px; overflow-wrap: anywhere }
 .uptime-block { text-align: right; flex-shrink: 0 }
 .uptime-block span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px }
 .uptime-block strong { font-size: 13px; font-family: var(--mono); font-weight: 400 }
-.computer-list { margin-bottom: 22px; min-width: 0 }
+.computer-list { min-width: 0 }
 .computer-choices { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin }
-.computer-choice { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); background: #161c19; flex-shrink: 0; font-size: 13px }
+.computer-choice { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); background: #161c19; flex-shrink: 0; font-size: 13px; transition: background-color var(--motion-fast) ease, border-color var(--motion-fast) ease }
 .computer-choice strong { color: #d9e2dd; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .computer-choice small { font: 11px var(--mono); color: var(--muted) }
 .computer-choice.active { background: #24372c; border-color: #5b8b74 }
 .computer-state { font-size: 12px }
-.metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 16px; margin-bottom: 20px }
-.metric-card { display: flex; flex-direction: column; align-items: stretch; min-width: 0; overflow: hidden; text-align: left; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 17px 18px 0; transition: border-color 160ms, background-color 160ms }
-.metric-card:hover { border-color: var(--metric-color); background: #202824 }
+.metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 16px }
+.metric-card { display: flex; flex-direction: column; align-items: stretch; min-width: 0; overflow: hidden; text-align: left; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 20px 20px 0; transition: border-color var(--motion-fast) ease, background-color var(--motion-fast) ease }
+@media (hover: hover) and (pointer: fine) { .metric-card:hover:not(:disabled) { border-color: var(--metric-color); background: #202824 } }
 .metric-card:active { background: #2b352e }
 .card-label { display: flex; justify-content: space-between; align-items: center; font-size: 14px }
 .card-code { color: var(--muted); font: 11px var(--mono) }
@@ -80,14 +83,16 @@ nav button.active::before { content: ""; position: absolute; left: 0; top: 14px;
 .metric-number small { font-size: 15px; color: var(--muted); margin-left: 6px; letter-spacing: 0 }
 .card-hardware { font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; margin-bottom: 2px }
 .card-subtitle { color: var(--muted); font-size: 12px; min-height: 20px; overflow-wrap: anywhere; flex: 1 }
-.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 22px; margin-bottom: 20px; min-width: 0 }
-.panel-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px; margin-bottom: 22px }
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: var(--panel-inset); min-width: 0 }
+.panel-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; min-height: var(--control-height); margin-bottom: var(--section-gap) }
 .panel-heading > div:first-child { min-width: 0; flex: 1 }
+.panel-heading > h2 { align-self: flex-start }
 .panel-heading p { color: var(--muted); font-size: 12px; margin-top: 5px; line-height: 1.7 }
-.chart-tabs, .history-ranges { display: flex; gap: 3px; padding: 4px; background: #111815; border: 1px solid var(--border); border-radius: 7px; max-width: 100% }
+.chart-tabs, .history-ranges { display: flex; gap: 3px; padding: 3px; background: #111815; border: 1px solid var(--border); border-radius: 7px; max-width: 100% }
 .chart-tabs { flex-wrap: wrap }
-.chart-tabs button, .history-ranges button { padding: 7px 13px; min-height: 36px; color: var(--muted); font-size: 12px; border-radius: 4px; white-space: nowrap }
+.chart-tabs button, .history-ranges button { padding: 6px 12px; min-height: 32px; color: var(--muted); font-size: 12px; border-radius: 4px; white-space: nowrap; transition: color var(--motion-fast) ease, background-color var(--motion-fast) ease }
 .chart-tabs button.active, .history-ranges button.active { background: #344b3d; color: #e3f2e8 }
+nav button:focus-visible, .computer-choice:focus-visible, .chart-tabs button:focus-visible, .history-ranges button:focus-visible { transition: none }
 .trend-chart { display: grid; grid-template-columns: 76px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto auto; column-gap: 8px; width: 100%; height: 260px; position: relative }
 .chart-axis { grid-column: 1; grid-row: 1; display: flex; flex-direction: column; justify-content: space-between; padding: 0 0 2px; color: #afbeb5; font: 12px var(--mono); text-align: right; line-height: 1.5 }
 .chart-surface { position: relative; grid-column: 2; grid-row: 1; min-width: 0; min-height: 0; touch-action: pan-y }
@@ -98,17 +103,19 @@ nav button.active::before { content: ""; position: absolute; left: 0; top: 14px;
 .chart-readout { grid-column: 2; grid-row: 2; min-height: 32px; padding-top: 9px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums }
 .chart-readout strong { color: #e4ece5; margin-left: 10px }
 .chart-time { grid-column: 2; grid-row: 3; display: flex; justify-content: space-between; gap: 8px; color: #a6b9ac; font: 12px var(--mono); margin-top: 8px }
-.trend-chart.compact { display: block; height: 45px; margin: 12px -18px 0; width: calc(100% + 36px) }
+.trend-chart.compact { display: block; height: 45px; margin: 12px -20px 0; width: calc(100% + 40px) }
 .compact .chart-surface { height: 100% }
 .compact .chart-empty { font-size: 11px }
-.lower-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 20px; align-items: start }
+.lower-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: var(--section-gap); align-items: start }
 .network-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 17px 0; border-bottom: 1px solid var(--border); font-size: 13px }
 .network-row:last-child { border-bottom: 0 }
 .network-row > span { min-width: 0; overflow-wrap: anywhere }
 .network-row > div { display: flex; flex-direction: column; gap: 4px; color: #b5ddc5; font: 12px var(--mono); white-space: nowrap; text-align: right }
 .network-row > div span:last-child { color: #b0bfb5 }
 .small-count { font-size: 12px; color: var(--muted); font-weight: 400; margin-left: 6px }
-.process-tools { display: flex; gap: 12px; align-items: center; justify-content: flex-end; flex-wrap: wrap; margin-bottom: 16px }
+.process-tools { display: grid; grid-template-columns: minmax(0, 1fr) auto 180px; gap: 16px; align-items: center; margin-bottom: var(--section-gap) }
+.process-tools.compact { display: flex; justify-content: flex-end }
+.process-tools .muted { white-space: nowrap }
 .process-tools select { min-height: 40px; font-size: 12px; padding: 8px }
 .table-scroll { overflow-x: auto; scrollbar-width: thin }
 .process-scroll { max-height: 65vh; overflow: auto }
@@ -118,6 +125,9 @@ th { color: #a6b8ac; font-weight: 400; font-size: 12px; position: sticky; top: 0
 td { color: #d0dbd3; font-variant-numeric: tabular-nums }
 tbody tr:last-child td { border-bottom: 0 }
 .process-table td:not(:first-child) { font-family: var(--mono); font-size: 12px; white-space: nowrap }
+.process-table :is(th, td):not(:first-child) { text-align: right }
+.process-table :is(th, td):first-child, .history-table :is(th, td):first-child { padding-left: 0 }
+.process-table :is(th, td):last-child, .history-table :is(th, td):last-child { padding-right: 0 }
 .process-table td:first-child { min-width: 100px; width: 40%; overflow-wrap: anywhere }
 .mobile-process-meta { display: none }
 .process-reason { margin-top: 4px; color: #e0be96; font-size: 12px }
@@ -128,13 +138,14 @@ tbody tr:last-child td { border-bottom: 0 }
 .help-details p { margin-top: 8px; overflow-wrap: anywhere }
 .detail-value { font-size: 27px; color: #b9e0cb; font-weight: 400 }
 .detail-chart { scroll-margin-top: 24px }
-.detail-tools { display: flex; align-items: center; gap: 16px; margin-bottom: 20px }
+.detail-tools { display: flex; align-items: center; gap: 16px }
+.detail-tools .muted { flex-shrink: 0; white-space: nowrap }
 .detail-tools input { flex: 1; max-width: 480px }
-.metric-detail-group { padding: 0 22px }
+.metric-detail-group { padding: 0 var(--panel-inset) }
 .metric-detail-group > summary { cursor: pointer; padding: 18px 0; font-size: 15px; font-weight: 550 }
 .metric-detail-group > summary > span { float: right; font-size: 12px; font-weight: 400; color: var(--muted) }
 .metric-row { display: grid; grid-template-columns: minmax(0, 1fr) 130px; gap: 16px; align-items: start; padding: 10px 0; border-top: 1px solid var(--border) }
-.metric-row-choice { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-width: 0; min-height: 52px; text-align: left; padding: 8px; border-radius: 6px }
+.metric-row-choice { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-width: 0; min-height: 52px; text-align: left; padding: 8px 0; border-radius: 6px }
 .metric-row-choice > span { min-width: 0; overflow-wrap: anywhere }
 .metric-row-choice small { display: block; font-size: 12px; color: var(--muted); margin-top: 4px }
 .metric-row-choice strong { font: 15px var(--mono); color: #c7e4d1; white-space: nowrap; flex-shrink: 0 }
@@ -143,10 +154,10 @@ tbody tr:last-child td { border-bottom: 0 }
 .metric-meta { color: var(--muted); font-size: 12px; padding-top: 10px; overflow-wrap: anywhere }
 .metric-meta summary { cursor: pointer; min-height: 40px }
 .metric-meta p { padding: 4px 0; line-height: 1.7 }
-.hardware-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: stretch }
-.hardware-panel { min-width: 0; border-radius: 10px; background: var(--panel) }
-.hardware-panel .el-card__header { padding: 18px 22px }
-.hardware-panel .el-card__body { padding: 20px 22px }
+.hardware-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--section-gap); align-items: stretch }
+.hardware-panel { min-width: 0; border-radius: 10px; background: var(--panel); --el-card-border-color: var(--border) }
+.hardware-panel .el-card__header { padding: var(--panel-inset) var(--panel-inset) var(--section-gap); border-bottom: 0 }
+.hardware-panel .el-card__body { padding: 0 var(--panel-inset) var(--panel-inset) }
 .hardware-panel .el-descriptions__table { table-layout: fixed }
 .hardware-panel .el-descriptions__label { width: 96px; font-weight: 400; color: var(--muted); white-space: nowrap }
 .hardware-panel .el-descriptions__cell { overflow-wrap: anywhere; word-break: normal; vertical-align: top }
@@ -154,8 +165,9 @@ tbody tr:last-child td { border-bottom: 0 }
 .hardware-meta { color: var(--muted); font-size: 12px; margin-top: 5px }
 .hardware-help { margin-top: 16px }
 .hardware-partitions .el-collapse-item__header { min-height: 32px; font-size: 12px; color: var(--accent) }
-.page-footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; color: var(--muted); font-size: 11px; padding-top: 12px; margin-top: 16px }
-.state-banner, .error-banner, .info-banner { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; border: 1px solid; border-radius: 7px; padding: 12px 16px; margin-bottom: 18px; font-size: 13px; line-height: 1.8 }
+.page-footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; color: var(--muted); font-size: 11px; padding-top: 4px }
+.page-content > .help-details { margin: 0 }
+.state-banner, .error-banner, .info-banner { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; border: 1px solid; border-radius: 7px; padding: 12px 16px; font-size: 13px; line-height: 1.8 }
 .state-banner { color: #e7cb9d; background: #2c261c; border-color: #63543a }
 .error-banner, .error-message { color: #f0b7ad }
 .error-banner { background: #30211e; border-color: #795046 }
@@ -167,14 +179,14 @@ tbody tr:last-child td { border-bottom: 0 }
 .welcome-state p { color: var(--muted); max-width: 420px; margin: 0 auto 22px }
 .welcome-state .text-button { display: block; margin: 12px auto 0 }
 .empty-mark { display: inline-grid; place-items: center; width: 56px; height: 56px; border-radius: 14px; color: var(--accent); background: #24382d; font-size: 30px }
-.history-controls { display: flex; align-items: end; flex-wrap: wrap; gap: 16px }
+.history-controls { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(180px, 1fr) auto auto; align-items: end; gap: 16px }
 .history-field { display: flex; flex-direction: column; gap: 8px; flex: 1 1 180px; min-width: 0 }
 .history-field label { color: var(--muted); font-size: 12px }
 .history-field select { width: 100%; font-size: 13px }
 .history-ranges { flex-shrink: 0 }
-.history-ranges button { padding: 8px 10px }
+.history-ranges button { padding: 6px 10px }
 .history-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px }
-.history-summary .panel { display: flex; flex-direction: column; gap: 8px; padding: 18px 22px }
+.history-summary .panel { display: flex; flex-direction: column; gap: 8px }
 .history-summary span, .history-summary small { font-size: 12px; color: var(--muted) }
 .history-summary strong { font-size: 25px; color: #b6e3cb; font-family: var(--mono); font-weight: 400 }
 .history-legend { display: flex; gap: 14px; font-size: 12px; white-space: nowrap }
@@ -194,24 +206,27 @@ tbody tr:last-child td { border-bottom: 0 }
 .check-label input[role="switch"]::before { content: ""; display: block; width: 14px; height: 14px; border-radius: 50%; background: #e6ece7; transition: transform 160ms }
 .check-label input[role="switch"]:checked { background: #659d80; border-color: #84b999 }
 .check-label input[role="switch"]:checked::before { transform: translateX(14px) }
-.notification-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin: 18px 0 }
+.notification-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin: 20px 0 }
 .notification-fields label { display: flex; flex-direction: column; gap: 8px; min-width: 0; font-size: 13px }
 .notification-fields small { color: var(--muted); font-size: 12px }
 .notification-actions { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin: 14px 0 }
-.notification-add { display: flex; gap: 12px; margin: 18px 0 }
+.notification-add { display: flex; gap: 12px; margin: 20px 0 }
 .notification-add select { flex: 1; width: 100px }
-.notification-rule { min-width: 0; border: 1px solid #415046; border-radius: 8px; margin: 24px 0; padding: 16px 18px; background: #151c18 }
+.notification-rule { min-width: 0; border: 1px solid #415046; border-radius: 8px; margin: 20px 0; padding: 20px; background: #151c18 }
 .notification-rule legend { padding: 0 8px; color: #d6e7da; font-size: 14px; max-width: 100%; overflow-wrap: anywhere }
 .rule-heading { display: flex; justify-content: space-between; align-items: center }
 .rule-summary { color: #bce0c9; font-size: 13px; margin: 8px 0 18px }
-.save-bar { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 16px; border: 1px solid #40564a; background: #1c2b22; border-radius: 8px; margin-bottom: 20px; position: sticky; top: 12px; z-index: 10 }
+.form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; border-top: 1px solid var(--border); padding-top: 20px; margin-top: 20px }
+.form-actions .el-button { flex-shrink: 0 }
 .draft-state { color: #e2d0a2; font-size: 12px }
 .notification-event { padding: 16px 0; border-top: 1px solid var(--border) }
 .notification-event time { color: var(--muted); font-size: 12px }
+.notification-event-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 16px; margin-bottom: 8px }
+.notification-event-heading strong { overflow-wrap: anywhere }
+.notification-event-heading time { white-space: nowrap }
 .notification-description { white-space: pre-wrap; overflow-wrap: anywhere }
-.enrollment-step { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 18px }
-.step-number { color: #99b5a5; font: 14px var(--mono); padding-top: 3px }
-.enrollment-step .panel-heading { margin-bottom: 16px }
+.step-number { color: #99b5a5; font: 13px var(--mono); flex-shrink: 0 }
+.step-actions { display: flex; align-items: center; gap: 16px }
 .enrollment-code { padding: 20px 24px; border-radius: 9px; border: 1px solid #4c7760; background: #14261c; display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px }
 .enrollment-code > span, .enrollment-code small { font-size: 12px; color: #b7cabe }
 .enrollment-code strong { font: 32px var(--mono); color: #b5edcf; letter-spacing: 2px; white-space: nowrap; user-select: all }
@@ -233,23 +248,24 @@ tbody tr:last-child td { border-bottom: 0 }
 .login-panel form > .el-button { width: 100%; margin-top: 24px }
 .sr-only, .skip-link:not(:focus) { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0 }
 .skip-link:focus { position: fixed; left: 16px; top: 10px; z-index: 100; padding: 10px 16px; color: #13241a; background: var(--accent); border-radius: 5px }
-@media (min-width: 1650px) { .page-content { padding-top: 36px } }
+@media (min-width: 1650px) { :root { --page-top: 36px } }
 @media (max-width: 1100px) {
+  :root { --page-inset: 24px; --page-top: 28px }
   .app-shell { grid-template-columns: 184px minmax(0, 1fr) }
   .sidebar { padding-inline: 12px }
   .brand { font-size: 14px; gap: 8px }
-  .page-content { padding: 26px 24px }
-  .topbar { padding-inline: 24px }
   .metric-card { padding-inline: 14px }
   .trend-chart.compact { margin-inline: -14px; width: calc(100% + 28px) }
   .metric-number { font-size: 31px }
   .lower-grid { grid-template-columns: 1fr }
+  .history-controls { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+  .history-controls > .el-button { justify-self: end }
 }
 @media (max-width: 1000px) {
   .hardware-grid { grid-template-columns: minmax(0, 1fr) }
 }
 @media (max-width: 700px) {
-  :root { font-size: 14px }
+  :root { font-size: 14px; --page-inset: 18px; --page-top: 20px; --panel-inset: 16px; --section-gap: 16px }
   .app-shell { display: block }
   .sidebar { height: auto; padding: 12px 16px 0; border-right: 0; border-bottom: 1px solid var(--border); background: #141b17 }
   .sidebar .brand { margin: 0 0 10px; width: fit-content; font-size: 16px }
@@ -262,31 +278,31 @@ tbody tr:last-child td { border-bottom: 0 }
   nav button.active::before { top: auto; bottom: 0; left: 13px; right: 13px; width: auto; height: 2px }
   .topbar { height: 38px; padding: 0 18px; font-size: 12px; border-bottom: 0; justify-content: flex-end }
   .topbar > span:first-child { display: none }
-  .topbar.global { display: none }
+  .topbar.global { display: flex }
   .topbar-right { width: 100%; justify-content: space-between; gap: 10px }
   .status-badge { padding: 2px 7px; font-size: 11px }
-  .page-content { padding: 12px 18px 24px }
-  .page-heading { gap: 12px; margin-bottom: 16px; align-items: flex-start }
+  .page-content { padding-bottom: 24px }
+  .page-heading { gap: 12px; min-height: 64px; align-items: flex-start }
   .page-heading h1 { font-size: 25px; margin-bottom: 4px }
   .page-description { font-size: 12px }
   .uptime-block { padding-top: 5px; max-width: 115px; line-height: 1.6 }
   .uptime-block span { font-size: 11px; margin: 0 }
   .uptime-block strong { font-size: 11px; font-family: inherit }
-  .computer-list { margin-bottom: 14px }
   .computer-choices { gap: 8px }
   .computer-choice { min-height: 42px; padding: 8px 10px; gap: 8px; font-size: 12px }
   .computer-choice strong { max-width: 160px }
   .computer-choice small { display: inline; font-size: 10px }
   .computer-state { font-size: 11px }
-  .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px }
+  .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px }
+  .metric-grid > .metric-card:last-child:nth-child(odd) { grid-column: 1 / -1 }
   .metric-card { padding: 12px 14px 0 }
   .card-label { font-size: 13px }
   .card-code { font-size: 10px }
   .metric-number { font-size: 31px; margin: 10px 0 3px }
   .card-subtitle { font-size: 12px; min-height: 20px }
   .trend-chart.compact { height: 28px; margin-top: 9px }
-  .panel { padding: 16px; border-radius: 9px; margin-bottom: 14px }
-  .panel-heading { gap: 12px; margin-bottom: 18px }
+  .panel { border-radius: 9px }
+  .panel-heading { gap: 12px }
   h2 { font-size: 16px }
   .panel-heading p { font-size: 12px }
   .main-chart .panel-heading { align-items: flex-start }
@@ -297,8 +313,8 @@ tbody tr:last-child td { border-bottom: 0 }
   .chart-axis, .chart-time { font-size: 12px }
   .chart-readout { grid-column: 1 / -1; font-size: 12px; min-height: 31px }
   .chart-readout .muted { font-size: 12px }
-  .lower-grid { gap: 0 }
-  .process-tools { gap: 8px; margin-bottom: 14px }
+  .process-tools { grid-template-columns: minmax(0, 1fr) 150px; gap: 12px }
+  .process-tools:not(.compact) > .el-input { grid-column: 1 / -1 }
   .process-tools select { font-size: 12px; padding: 8px; min-height: 40px }
   .process-tools .muted { font-size: 11px }
   .process-tools input { flex-basis: 100%; width: 100% }
@@ -315,28 +331,27 @@ tbody tr:last-child td { border-bottom: 0 }
   .process-reason p { font-size: 12px }
   .network-row { font-size: 12px; gap: 10px; padding: 14px 0 }
   .detail-value { font-size: 22px }
-  .detail-tools { margin-bottom: 14px; gap: 12px }
+  .detail-tools { gap: 12px }
   .detail-tools .muted { white-space: nowrap; font-size: 11px }
   .metric-detail-group { padding: 0 16px }
   .metric-detail-group > summary { font-size: 14px; padding: 16px 0 }
   .metric-row { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 8px 0 }
-  .metric-row-choice { padding: 8px 6px; gap: 10px; font-size: 13px }
+  .metric-row-choice { padding: 8px 0; gap: 10px; font-size: 13px }
   .metric-row-choice strong { font-size: 14px }
   .metric-meta { padding: 0 6px }
   .metric-meta summary { min-height: 28px }
   .detail-chart, #peak-processes { scroll-margin-top: 112px }
   .hardware-grid { grid-template-columns: minmax(0, 1fr); gap: 14px }
-  .hardware-panel .el-card__header { padding: 16px 18px }
-  .hardware-panel .el-card__body { padding: 16px 18px }
   .hardware-panel .el-descriptions__label { width: 80px }
-  .history-controls { gap: 12px }
+  .history-controls { gap: 12px; grid-template-columns: minmax(0, 1fr) auto }
+  .history-field { grid-column: 1 / -1 }
   .history-field { flex-basis: 100%; gap: 5px }
   .history-field select { font-size: 12px }
   .history-ranges { flex: 1; justify-content: space-between; gap: 0 }
   .history-ranges button { font-size: 11px; padding: 6px 7px; min-height: 34px }
   .history-controls > .text-button { padding: 8px 0 }
-  .history-summary { gap: 8px; margin-bottom: 14px }
-  .history-summary .panel { padding: 12px 10px; gap: 5px; margin: 0 }
+  .history-summary { gap: 8px }
+  .history-summary .panel { gap: 5px }
   .history-summary span, .history-summary small { font-size: 12px }
   .history-summary strong { font-size: 17px; line-height: 1.6; overflow-wrap: anywhere }
   .history-summary small { line-height: 1.6 }
@@ -350,12 +365,9 @@ tbody tr:last-child td { border-bottom: 0 }
   .notification-add button { width: 100% }
   .notification-rule { padding: 12px; margin: 20px 0 }
   .notification-rule legend { font-size: 13px }
-  .save-bar { top: 106px; padding: 10px 12px; margin-bottom: 14px; gap: 12px }
-  .save-bar .primary-button { padding: 8px 12px; white-space: nowrap; min-height: 40px; font-size: 12px }
   .draft-state { font-size: 11px }
   .notification-actions { gap: 12px }
-  .enrollment-step { grid-template-columns: 25px minmax(0, 1fr); gap: 8px }
-  .step-number { font-size: 12px; padding-top: 4px }
+  .step-number { font-size: 12px }
   .enrollment-step h2 { font-size: 15px }
   .enrollment-code { padding: 16px 12px }
   .enrollment-code strong { font-size: clamp(17px, 5.1vw, 27px); letter-spacing: 1px }
@@ -363,7 +375,9 @@ tbody tr:last-child td { border-bottom: 0 }
   .code-actions .primary-button { width: 100% }
   .enrollment-checks { flex-direction: column; gap: 8px }
   .enrollment-checks span { padding: 6px 8px }
-  .state-banner, .error-banner, .info-banner { padding: 10px 12px; font-size: 12px; margin-bottom: 14px }
+  .state-banner, .error-banner, .info-banner { padding: 10px 12px; font-size: 12px }
+  .notification-event-heading { grid-template-columns: minmax(0, 1fr) auto; gap: 8px }
+  .notification-event-heading strong { grid-column: 1 / -1 }
   .page-footer { font-size: 11px; line-height: 1.8; flex-direction: column; gap: 0 }
   .login-panel { padding: 30px 24px }
   .login-panel .brand { margin-bottom: 36px }

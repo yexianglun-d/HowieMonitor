@@ -14,6 +14,7 @@
 @import 'element-plus/theme-chalk/dark/css-vars.css';
 
 html.dark {
+  --el-component-size-large: var(--control-height); --el-font-size-base: 13px;
   --el-color-primary: #9adbc9;
   --el-color-primary-light-3: #b8e6da;
   --el-color-primary-light-5: #435f55;
@@ -40,7 +41,7 @@ html.dark {
 .el-collapse-item__header { font-weight: 500; text-align: left; line-height: 1.6; height: auto; min-height: 44px }
 .el-collapse-item__wrap { border: 0 }
 .el-collapse-item__content { padding-bottom: 12px; overflow-wrap: anywhere }
-.el-alert { margin-bottom: 20px }
+.el-alert { margin: 0 }
 .el-alert__content { min-width: 0 }
 .el-alert__description { overflow-wrap: anywhere }
 .initial-screen { min-height: 100dvh; display: grid; place-items: center; padding: 24px }
@@ -48,8 +49,8 @@ html.dark {
 .initial-panel .brand { margin-bottom: 36px }
 .initial-panel p { color: var(--muted); font-size: 13px; margin-top: 20px }
 .computer-loading { min-height: 320px; padding-block: 36px }
-.process-tools .el-input { flex: 1 1 220px; max-width: 360px }
-.process-tools .el-select { width: 180px; flex: 0 0 auto }
+.process-tools .el-input { width: 100% }
+.process-tools .el-select { width: 180px }
 .notification-add .el-select { width: auto; min-width: 0; flex: 1 }
 .notification-add .el-button { flex-shrink: 0 }
 .notification-fields .el-input__inner { width: 100% }

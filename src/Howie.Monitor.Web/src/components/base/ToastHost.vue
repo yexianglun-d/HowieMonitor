@@ -32,9 +32,10 @@ onUnmounted(toast.clear)
 .toast-close { display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; padding: 0; border-radius: 5px; color: inherit }
 .toast-close:hover { background: #ffffff0d }
 .toast-close svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round }
-.toast-enter-active, .toast-leave-active { transition: opacity 180ms ease, transform 180ms ease }
-.toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-12px) scale(.98) }
-.toast-move { transition: transform 180ms ease }
+.toast-enter-active { transition: opacity var(--motion-normal) var(--ease-out), transform var(--motion-normal) var(--ease-out) }
+.toast-leave-active { transition: opacity var(--motion-fast) ease, transform var(--motion-fast) ease }
+.toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-6px) }
+.toast-move { transition: transform var(--motion-normal) var(--ease-out) }
 .toast-leave-active { position: absolute; left: 0; right: 0 }
 @media (max-width: 700px) {
   .toast-host { top: calc(12px + env(safe-area-inset-top, 0px)) }

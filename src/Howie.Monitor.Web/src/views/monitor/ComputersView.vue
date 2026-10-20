@@ -42,13 +42,13 @@ const temperatures = (computer: ComputerSummary) => temperatureGroups(computer.t
   <section v-if="!filtered.length" class="panel empty-state"><p>{{ computers.length ? '没有匹配的电脑' : '尚未接入电脑' }}</p><ElButton v-if="!computers.length" type="primary" @click="$emit('enroll')">添加第一台电脑</ElButton></section>
 </template>
 <style scoped>
-.fleet-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 22px }
+.fleet-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 16px }
 .fleet-filters { display: flex; gap: 4px; flex: 1; min-width: 260px }
-.fleet-filters button { min-height: 42px; padding: 8px 12px; border-radius: 7px; color: var(--muted); white-space: nowrap }
+.fleet-filters button { min-height: var(--control-height); padding: 8px 12px; border-radius: 7px; color: var(--muted); white-space: nowrap; transition: color var(--motion-fast) ease, background-color var(--motion-fast) ease }
 .fleet-filters button.active { background: #263c31; color: #d8eee2 }
 .fleet-filters span { margin-left: 6px; font-family: var(--mono) }
 .fleet-tools :deep(.el-input) { width: min(100%, 260px) }
-.fleet-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 20px }
+.fleet-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: var(--section-gap) }
 .fleet-card { margin-bottom: 0; display: flex; flex-direction: column }
 .fleet-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px }
 .fleet-card-heading > div { min-width: 0 }
@@ -71,5 +71,5 @@ dd { margin: 5px 0 0; font-family: var(--mono); font-variant-numeric: tabular-nu
 .fleet-sampled { margin-top: 16px }
 .fleet-card-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 17px }
 .fleet-card-actions :deep(.el-button + .el-button) { margin-left: 0 }
-@media (max-width: 700px) { .fleet-grid { gap: 14px } .fleet-card { padding: 18px } .fleet-tools { gap: 10px } .fleet-tools :deep(.el-input) { width: 100%; order: 3 } .fleet-filters { min-width: 0 } .fleet-filters button { padding-inline: 9px } .fleet-usage dd { font-size: 20px } }
+@media (max-width: 700px) { .fleet-tools { gap: 12px } .fleet-tools :deep(.el-input) { width: 100%; order: 3 } .fleet-filters { min-width: 0 } .fleet-filters button { padding-inline: 9px } .fleet-usage dd { font-size: 20px } }
 </style>

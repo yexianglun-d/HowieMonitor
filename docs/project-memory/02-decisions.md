@@ -15,6 +15,13 @@
 - 来源：https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/blob/3d331e3370efb858411f19511373eff65a218701/LibreHardwareMonitorLib/Hardware/Storage/StorageDevice.cs
 - 状态：accepted。
 
+## 2026-10-20 / 菜单对齐与克制动效
+
+- 决策：按用户要求统一 8 个菜单的视觉边界和间距；动效只用于切页、控件反馈和 Toast。切页整体轻移 4px、持续 220ms，不逐卡片错峰、上浮或缩放。
+- 约束：实时采样刷新不重播；键盘切页直接展示；遵循系统减少动态效果偏好，快速切换和缓存页面停用时清理上一段动效。
+- 验证：使用内置浏览器在隔离实例检查响应式页面与真实 DOM 动画帧，不以合成样本冒充生产采集结果。
+- 状态：accepted。
+
 ## 2026-10-20 / GPU 按显卡独立展示
 
 - 决策：用户明确选择“分别显示每张显卡的名称、占用和曲线”。运行总览和电脑摘要不再只取第一张显卡；同型号显卡也按传感器硬件 ID 区分。

@@ -2,6 +2,8 @@
 
 ## 下次继续
 
+- 本轮菜单视觉对齐与柔和动效已通过隔离实例验收，尚未部署：统一内容边界、标题、面板内边距、工具栏/操作区；删除卡片上浮/缩放与图表独立入场。页面整体 4px / 220ms，实时刷新不重播，键盘和减少动态效果模式无位移。
+- 内置浏览器新建本地标签可正常使用；本轮没有启动外部 Chrome。390 / 1024 / 1280 / 1920px 的 8 个菜单、实际保存 Toast 与帧采样证据保存在忽略目录 `output/alignment-motion-20261020/`，均为明确标识的隔离合成采样。
 - GPU 修复 `e7be1af` 已验证并部署：旧版把第一条 AMD 核显 0% 显示为电脑的 GPU 占用，忽略已上报的 RTX 5070 Ti 5%。用户明确选择逐显卡名称、占用与曲线；不要改成只显示独显、最高值或多显卡相加。
 - `ComputerSummary.gpus` 是逐显卡列表，旧 `gpuPercent` 仅在单显卡时保留；前后端按硬件 ID 分组，组内优先可用 `GPU Core`，不可用时使用 `D3D 3D` 并明确标为 3D 引擎占用。保留原始指标 key，显存/总线/功耗百分比不能作为核心占用。
 - 先运行 `git status --short --branch` 与 `git log -5 --oneline`。应用代码 `e7be1af` 已于 2026-10-20 部署至 `https://monitor.howied.me/`，包含逐显卡修复及此前 Toast、温度展示、多电脑总览与独立通知规则；本地提交尚未推送 GitHub。
@@ -37,7 +39,7 @@
 
 ## 验证入口
 
-- 前端目录：`npm run build`、`npm test`（当前 41 项）。
+- 前端目录：`npm run build`、`npm test`（当前 44 项）。
 - 当前 macOS 可通过忽略目录 `.local/multi-computer-tests/Howie.Monitor.Core.Tests.csproj` 运行不依赖 Windows 的服务端子集（73 项）；Windows 仍应运行仓库原测试项目。
 - 根目录：`python3 -m unittest discover -s tests -p 'test_*.py'`。
 - Windows 构建、测试和发布遵循 `BUILDING.md` 与 `global.json`。

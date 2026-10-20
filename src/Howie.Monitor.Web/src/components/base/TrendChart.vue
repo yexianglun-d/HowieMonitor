@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { gsap } from 'gsap'
+import { computed, ref } from 'vue'
 import type { HistoryPoint } from '../../types/monitor'
 import { capacity, number, rate, time } from '../../utils/format'
 const props = withDefaults(defineProps<{ points: HistoryPoint[]; color?: string; compact?: boolean; percent?: boolean; unit?: string; intervalSeconds?: number; showMaximum?: boolean; dateTime?: boolean }>(), { color: '#9adbc9', compact: false, percent: true, unit: '%', intervalSeconds: 2, showMaximum: false, dateTime: false })
 const width = 640, height = 160
-const root = ref<HTMLElement | null>(null), focused = ref<number | null>(null)
+const focused = ref<number | null>(null)
 const limits = computed(() => {
   const values = props.points.flatMap(point => [point.value, props.showMaximum ? point.maximum : null]).filter((value): value is number => value != null)
   return { minimum: props.percent ? 0 : Math.min(0, ...values), maximum: props.percent ? 100 : Math.max(1, ...values) }
@@ -50,18 +49,9 @@ function inspect(event: PointerEvent) {
   focused.value = props.points.reduce((best, point, index) => Math.abs(Date.parse(point.sampledAt) - stamp) < Math.abs(Date.parse(props.points[best]!.sampledAt) - stamp) ? index : best, 0)
 }
 function step(delta: number) { focused.value = Math.max(0, Math.min(props.points.length - 1, (focused.value ?? props.points.length - 1) + delta)) }
-let media: gsap.MatchMedia | undefined
-onMounted(() => {
-  if (props.compact || !root.value) return
-  media = gsap.matchMedia()
-  media.add('(prefers-reduced-motion: no-preference)', () => {
-    gsap.fromTo('.chart-lines', { opacity: .2 }, { opacity: 1, duration: .32, ease: 'power2.out', clearProps: 'opacity' })
-  }, root.value)
-})
-onUnmounted(() => media?.revert())
 </script>
 <template>
-  <div ref="root" class="trend-chart" :class="{ compact }">
+  <div class="trend-chart" :class="{ compact }">
     <div v-if="!compact" class="chart-axis" aria-hidden="true"><span>{{ valueText(limits.maximum) }}</span><span>{{ valueText((limits.maximum + limits.minimum) / 2) }}</span><span>{{ valueText(limits.minimum) }}</span></div>
     <div class="chart-surface" :tabindex="compact ? undefined : 0" :role="compact ? undefined : 'group'" :aria-label="compact ? undefined : '趋势图，使用左右方向键查看采样值'" @pointermove="inspect" @pointerdown="inspect" @pointerleave="focused = null" @blur="focused = null" @keydown.left.prevent="step(-1)" @keydown.right.prevent="step(1)">
       <svg :viewBox="'0 0 ' + width + ' ' + height" preserveAspectRatio="none" role="img" :aria-label="'采样曲线，共 ' + points.length + ' 个时间点'">
