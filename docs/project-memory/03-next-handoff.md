@@ -2,12 +2,12 @@
 
 ## 下次继续
 
-- 优先处理新管理员终端的 Windows 11 实机验收：源码和本地协议/UI 检查已完成，功能默认关闭，未部署、未发布安装包。不要直接使用以前的“只换服务器资源”流程声明此功能可用；这次必须升级 Windows 采集端，并在安装向导显式勾选本机授权。
+- 管理员终端应用 `05e985a` 已于北京时间 2026-10-20 17:44 部署，新版未签名安装包已更新至受保护下载页。默认关闭，没有自动升级/授权目标电脑。下一步在目标 Windows 11 上重新下载安装包，运行修复/升级并显式勾选本机终端授权，再做真实提权、PowerShell 交互与退出清理验收；不能只凭服务器部署成功声明这些已验证。
 - 用户已选择当前已登录的管理员账号，不保存 Windows 密码，注销后不可用。授权绑定安装账号 SID；必须有真实提升令牌，拒绝 SYSTEM/服务身份；切换电脑或离开终端页结束会话，断线不重连、不重放输入。逐项验收步骤见 `docs/terminal-acceptance.md`。
 - 关键代码：Contracts `Terminal.cs`；Server `TelemetryTerminal.cs`、`TerminalBroker.cs`、`TerminalEndpoints.cs`；Agent `AdminTerminalIdentity.cs`、`WindowsAdminTerminal.cs`、`TerminalWorker.cs`；Web `TerminalView.vue`、`useTerminal.ts` 与 API。终端视图按电脑 ID 销毁重建，不能仅 reset xterm 后保留异步输出队列。
-- 终端验证：51 项前端、26 项终端、73 项既有服务端子集、20 项 Python；Agent/Server/Setup 编译通过。Setup 的 macOS 参考程序集/锁文件差异通过 `.local/terminal-windows-reference.targets` 和 `.local/terminal-setup.packages.lock.json` 作隔离编译验证，正式 Windows 锁文件未改；真实提权、Ctrl+C、注销、断网与子进程清理仍待验收。
+- 终端发布验证：Windows Actions `39401536776` 通过完整 193 项 .NET、20 项 Python、51 项前端、编译与安装包嵌入载荷/运行时检查。源码已推送，产物来源固定为 `05e985ae16afc1237e5a43c33f541025c3b5696e`；ZIP SHA-256 `63a1e017bf2797f2b59a22577ad3b68cad5ed8f53a08a7f99bec02290a228b80`。真实提权、Ctrl+C、注销、断网与子进程清理仍待 Windows 账号实机验收。
 - 内置浏览器 UI 检查仅用本地协议模拟器，未执行真实命令。临时模拟器已停止，截图/日志位于 `output/terminal-20261020/`；没有启动外部 Chrome，也没有访问生产服务器。反向代理需要模板中的 WebSocket Upgrade 路由，隐私说明已涵盖终端输入/输出由运营者服务器转发。
-- 推送状态校正：本轮开始时 `main` 与 `origin/main` 同为 `34949f0`，以下旧条目中“尚未推送”是历史记录，不代表当前旧版本未同步。新终端本轮尚未部署。
+- 推送状态校正：本轮开始时 `main` 与 `origin/main` 同为 `34949f0`，以下旧条目中“尚未推送”是历史记录，不代表当前旧版本未同步。新终端本轮已部署；后续部署状态以上方新记录为准。
 
 - 指标行补丁 `7ab7225` 已完成本地验证并部署：数值和来源同一首行基线，原因展开不改变位置；手机端来源与名称同左边界。电脑总览的显卡/温度行同样使用基线；搜索框改为外层控件布局，内层左右留白一致，焦点反馈保留在外框。不要只检查页面标题就声明内容对齐。
 - 补丁证据在忽略目录 `output/metric-row-alignment-20261020/`：20 个逻辑处理器、共 31 项指标、长名称/缺失值/展开原因、桌面和平板/手机布局，均为隔离合成样本。实际通知与生产配置没有被测试修改。
@@ -23,6 +23,12 @@
 - CPU 温度仍需在相应 Windows 电脑安装/修复 PawnIO，再重启 `HowieMonitorAgent` 并验证最新上报；生产部署没有修改 Windows 驱动或安装包。
 
 ## 当前部署
+
+- 当前 `/opt/howie-monitor/current` 指向 `/opt/howie-monitor/releases/20261020-05e985a`，上一个应用为 `20261020-7ab7225`。容器、镜像、数据目录保持原样。部署记录位于服务器 `/opt/howie-monitor/staging/deploy-terminal-20261020/`，本地脚本和非敏感验证结果在 `.local/deploy-terminal-20261020/`。
+- 新安装包 SHA-256 `38de5397bd7753622718bfdc221845d3a5891dc340596c85be5c9760207d6b8c`，93,930,303 字节，仍未签名；旧安装包保留在服务器本次 staging 的 `pre-switch/HowieMonitorSetup.exe`，原 SHA-256 为 `f196467e416e5e310afc51b4c9fe7736f0ffd3129ef75554593f4e7ca3372a49`。Nginx 原配置保留为 `nginx-before.conf`，只新增了两个终端 socket 路径的 Upgrade 转发。
+- 本次部署前备份为 `/opt/howie-monitor/backups/monitor-20261020-093415.tar.gz`，SHA-256 `9face49499f103c311ce5b99441861bc7eeb35b95a5d1a9fb2527d6cd7fdca3a`，已做隔离恢复校验。不要下载其中生产数据库/凭据到本地。
+- 发布包在无网络容器中通过终端协议验证；临时容器和数据已清理。线上 5 个公网资源哈希、3 个保护接口及 WS 代理检查通过，真实采样/历史继续写入；通知规则、登录密码哈希、设备凭据、密钥保留。本轮未执行生产终端命令，也未主动发送通知。内置浏览器新线上标签仍超时，生产截图验收未完成。
+- 以下是此前部署的历史记录，不能用旧路径推断当前版本。
 
 - 服务器上的 `howie-monitor` Docker 容器配置保持原样；`/opt/howie-monitor/current` 指向 `/opt/howie-monitor/releases/20261020-7ab7225`，数据位于 `/var/lib/howie-monitor`。
 - 行内补丁上一个版本为 `/opt/howie-monitor/releases/20261020-e9b76d0`；部署记录在 `/opt/howie-monitor/staging/deploy-metric-rows-20261020/`，切换约 2.1 秒。仅样式变更、无数据迁移；通知规则、凭据、密钥和安装包均保留。公网资源与发布包一致，真实上报和历史正常；此次新内置标签导航线上后也读取超时，隔离截图仍不能当作生产截图。
@@ -50,7 +56,7 @@
 
 ## 验证入口
 
-- 前端目录：`npm run build`、`npm test`（当前 44 项）。
+- 前端目录：`npm run build`、`npm test`（当前 51 项）。
 - 当前 macOS 可通过忽略目录 `.local/multi-computer-tests/Howie.Monitor.Core.Tests.csproj` 运行不依赖 Windows 的服务端子集（73 项）；Windows 仍应运行仓库原测试项目。
 - 根目录：`python3 -m unittest discover -s tests -p 'test_*.py'`。
 - Windows 构建、测试和发布遵循 `BUILDING.md` 与 `global.json`。
