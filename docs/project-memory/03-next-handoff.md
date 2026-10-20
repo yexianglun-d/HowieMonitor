@@ -2,13 +2,13 @@
 
 ## 下次继续
 
-- 指标行补丁已完成本地验证、尚未部署：数值和来源同一首行基线，原因展开不改变位置；手机端来源与名称同左边界。电脑总览的显卡/温度行同样使用基线；搜索框改为外层控件布局，内层左右留白一致，焦点反馈保留在外框。不要只检查页面标题就声明内容对齐。
+- 指标行补丁 `7ab7225` 已完成本地验证并部署：数值和来源同一首行基线，原因展开不改变位置；手机端来源与名称同左边界。电脑总览的显卡/温度行同样使用基线；搜索框改为外层控件布局，内层左右留白一致，焦点反馈保留在外框。不要只检查页面标题就声明内容对齐。
 - 补丁证据在忽略目录 `output/metric-row-alignment-20261020/`：20 个逻辑处理器、共 31 项指标、长名称/缺失值/展开原因、桌面和平板/手机布局，均为隔离合成样本。实际通知与生产配置没有被测试修改。
 - 本轮菜单视觉对齐与柔和动效 `e9b76d0` 已通过隔离实例验收并部署：统一内容边界、标题、面板内边距、工具栏/操作区；删除卡片上浮/缩放与图表独立入场。页面整体 4px / 220ms，实时刷新不重播，键盘和减少动态效果模式无位移。
 - 内置浏览器新建本地标签可正常使用；本轮没有启动外部 Chrome。390 / 1024 / 1280 / 1920px 的 8 个菜单、实际保存 Toast 与帧采样证据保存在忽略目录 `output/alignment-motion-20261020/`，均为明确标识的隔离合成采样。
 - GPU 修复 `e7be1af` 已验证并部署：旧版把第一条 AMD 核显 0% 显示为电脑的 GPU 占用，忽略已上报的 RTX 5070 Ti 5%。用户明确选择逐显卡名称、占用与曲线；不要改成只显示独显、最高值或多显卡相加。
 - `ComputerSummary.gpus` 是逐显卡列表，旧 `gpuPercent` 仅在单显卡时保留；前后端按硬件 ID 分组，组内优先可用 `GPU Core`，不可用时使用 `D3D 3D` 并明确标为 3D 引擎占用。保留原始指标 key，显存/总线/功耗百分比不能作为核心占用。
-- 先运行 `git status --short --branch` 与 `git log -5 --oneline`。应用代码 `e9b76d0` 已于 2026-10-20 部署至 `https://monitor.howied.me/`，包含视觉对齐、柔和动效、逐显卡修复及此前功能；本地提交尚未推送 GitHub。
+- 先运行 `git status --short --branch` 与 `git log -5 --oneline`。应用代码 `7ab7225` 已于 2026-10-20 部署至 `https://monitor.howied.me/`，包含行内对齐补丁、视觉对齐、柔和动效、逐显卡修复及此前功能；本地提交尚未推送 GitHub。
 - 总览默认路由 `#computers`，各卡片直接进入对应电脑的总览/通知。`/api/notifications/computer?computerId=...` 必须明确电脑归属；全局 `/api/notifications` 只管理共用发送渠道与无归属旧记录。
 - `NotificationStore` 一次性把旧规则复制给当时已接入的电脑；迁移标记持久化，新增电脑默认空规则。不能重跑迁移、把旧任务强行猜测归属，或让保存 A 清空 B 的观察状态。
 - 用户反馈“温度都没有”：排查时确认旧版页面只按英文原名搜索，中文“温度”返回 0 项；实际 CPU 上报驱动缺失，其他 GPU/SSD 有可用读数。搜索与展示问题已随新版部署，驱动问题仍独立存在。
@@ -17,7 +17,8 @@
 
 ## 当前部署
 
-- 服务器上的 `howie-monitor` Docker 容器配置保持原样；`/opt/howie-monitor/current` 指向 `/opt/howie-monitor/releases/20261020-e9b76d0`，数据位于 `/var/lib/howie-monitor`。
+- 服务器上的 `howie-monitor` Docker 容器配置保持原样；`/opt/howie-monitor/current` 指向 `/opt/howie-monitor/releases/20261020-7ab7225`，数据位于 `/var/lib/howie-monitor`。
+- 行内补丁上一个版本为 `/opt/howie-monitor/releases/20261020-e9b76d0`；部署记录在 `/opt/howie-monitor/staging/deploy-metric-rows-20261020/`，切换约 2.1 秒。仅样式变更、无数据迁移；通知规则、凭据、密钥和安装包均保留。公网资源与发布包一致，真实上报和历史正常；此次新内置标签导航线上后也读取超时，隔离截图仍不能当作生产截图。
 - 视觉版本的上一个版本为 `/opt/howie-monitor/releases/20261020-e7be1af`，切换耗时约 2.32 秒；发布与验证记录在 `/opt/howie-monitor/staging/deploy-alignment-20261020/`。无数据格式变更，隔离容器和临时数据已清理；原规则、登录/配对凭据、密钥及 Windows 安装包均保留。公网资源字节与构建一致，真实采样和历史写入正常；线上旧标签浏览器连接仍超时，不把本地视觉截图当成线上证据。
 - 已验证备份：`/opt/howie-monitor/backups/monitor-20261020-052017.tar.gz`，SHA-256 为 `4c37e74819873edea788ee205d8baf42817d6b17322d5659ab1cc7a4bc8b6ad8`，同目录保留 `.sha256` 和 `.verified.json`。备份停服约 19.43 秒，正式版本切换约 3.4 秒。
 - 原版本保留于 `/opt/howie-monitor/releases/20261019-133500/Howie.Monitor.Server-0.1.0-linux-x64-20261019-132130`；部署清单、演练与切换结果位于服务器 `/opt/howie-monitor/staging/deploy-42b30e6-20261020/`。凭据和数据库仅保留在服务器受限目录，项目日志不记录密码。
