@@ -9,7 +9,7 @@ defineEmits<{ enroll: []; select: [metric: Metric]; temperatures: [] }>()
 <template>
   <template v-if="device">
   <TemperaturePanel :metrics="metrics" :data-status="dataStatus" @select="$emit('select', $event)" @details="$emit('temperatures')"/>
-  <div class="hardware-grid">
+  <div class="hardware-grid" data-scroll-section="硬件配置">
     <ElCard class="hardware-panel" shadow="never">
       <template #header><h2>处理器与内存</h2></template>
       <ElDescriptions :column="1" border>

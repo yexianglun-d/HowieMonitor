@@ -386,3 +386,42 @@ tbody tr:last-child td { border-bottom: 0 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0s !important; animation-duration: 0s !important }
 }
+
+/* 上下文随页面停靠；内容和读数不参与视差。 */
+.page-content { --sticky-top: 0px }
+.page-heading { position: relative; min-height: 126px; overflow: hidden; padding-block: 12px 22px; border-bottom: 1px solid #28352e }
+.heading-copy { min-width: 0; position: relative; flex: 1 }
+.page-eyebrow { display: block; font: 10px/1.5 var(--mono); letter-spacing: 2px; color: #85a99a; margin-bottom: 10px }
+.page-heading h1 { font-size: clamp(27px, 2.6vw, 38px); letter-spacing: -1px }
+.page-heading .heading-copy > :not(.heading-contour) { position: relative; z-index: 1 }
+.heading-contour { pointer-events: none; position: absolute; right: 8%; top: -100px; width: 280px; height: 220px; opacity: .35 }
+.heading-contour i { position: absolute; inset: 0; border: 1px solid #466758; border-radius: 50%; transform: rotate(-24deg) }
+.heading-contour i:nth-child(2) { inset: 20px -28px -20px 28px; border-color: #365b4b }
+.heading-contour i:nth-child(3) { inset: 40px -56px -40px 56px; border-color: #2e4a3d }
+.context-toolbar { position: sticky; top: var(--sticky-top); z-index: 10; display: grid; gap: 12px; min-width: 0; padding-block: 10px; margin-block: -10px; background: #101414; border-bottom: 1px solid transparent; transition: box-shadow var(--motion-normal) ease }
+.context-toolbar.has-sections { padding-bottom: 18px }
+.context-toolbar.is-stuck { box-shadow: 0 12px 20px -18px #000; border-bottom: 1px solid #34473d }
+.computer-list { display: flex; gap: 8px; align-items: center }
+.computer-choices { position: relative; min-width: 0; flex: 1; scroll-snap-type: x proximity; overscroll-behavior-x: contain; scrollbar-width: none; padding-block: 2px }
+.computer-choice { scroll-snap-align: start }
+.computer-rail-arrow { flex-shrink: 0; width: 28px; min-height: 40px; border: 1px solid var(--border); border-radius: 6px; color: var(--accent); font-size: 24px }
+[data-scroll-section] { scroll-margin-top: 146px }
+[data-scroll-section].panel { transition: border-color 220ms ease }
+[data-scroll-section].panel.is-reading { border-color: #4b685b }
+.detail-chart { scroll-margin-top: 146px }
+@media (max-width: 700px) {
+  .page-content { --sticky-top: 97px }
+  .page-heading { min-height: 112px; padding-block: 4px 18px }
+  .page-heading h1 { font-size: 28px }
+  .page-eyebrow { font-size: 9px; margin-bottom: 7px }
+  .heading-contour { right: -90px; top: -100px; opacity: .22 }
+  .computer-choice { min-height: 42px; padding: 8px 10px; gap: 8px }
+  .computer-choice strong { max-width: 150px }
+  .computer-choice small { display: none }
+  .context-toolbar { gap: 8px }
+  [data-scroll-section], .detail-chart { scroll-margin-top: 220px }
+}
+@media (prefers-reduced-motion: reduce) {
+  .context-toolbar, [data-scroll-section].panel { transition: none }
+  .computer-choices, .fleet-rail { scroll-snap-type: none }
+}

@@ -9,7 +9,7 @@ defineEmits<{ select: [metric: Metric]; details: [] }>()
 const groups = computed(() => temperatureGroups(props.metrics))
 </script>
 <template>
-  <section class="panel temperature-panel" aria-label="硬件温度">
+  <section class="panel temperature-panel" data-scroll-section="硬件温度" aria-label="硬件温度">
     <div class="panel-heading"><div><h2>硬件温度</h2><p>{{ dataStatus === 'fresh' ? '当前采样 · 摄氏度' : dataStatus === 'waiting' ? '等待温度上报' : '最后采样温度 · 数据非最新' }}</p></div><ElButton type="primary" link @click="$emit('details')">查看温度指标</ElButton></div>
     <div class="temperature-grid">
       <article v-for="group in groups" :key="group.id" class="temperature-card">

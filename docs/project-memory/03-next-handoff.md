@@ -2,6 +2,10 @@
 
 ## 下次继续
 
+- 最新本地改动是滚动交互，尚未部署。`useScrollExperience.ts` 将 GSAP ScrollTrigger、吸顶段落导航、阅读进度和装饰视差统一清理；不要让实时采样行的 DOM 更新反复调用 refresh（会打断原生 smooth scroll）。只有段落身份或布局尺寸变化才重建/刷新，刷新使用 safe 模式；当前位置按当前段落实际边界计算。
+- `useHorizontalRail.ts` 复用到电脑卡片与电脑切换栏；原生横向滚动/CSS 吸附，不拦截纵向滚轮。电脑总览默认横向，可切回网格；方向键仅在轨道自身获焦时接管。减少动态效果关闭视差/吸附，按钮/锚点直接定位。保留电脑 ID、指标身份、表单草稿与终端销毁边界。
+- 当前前端 59 项测试和生产构建通过；9 个菜单桌面走查、390px 关键交互与减少动态效果通过。本地截图在 `output/scroll-experience-20261020/`，均为合成验证样本。不要把本地预览描述为线上已部署；需要发布时沿用已有发布/备份流程。
+
 - 彻底移除电脑及通知下拉框修复 `2c0a840` 已于北京时间 2026-10-20 18:29 部署并推送。入口在电脑总览卡片和历史记录；确认框展示名称/完整 ID，复验面板密码。本次没有删除任何生产电脑；不要使用真实电脑随意做删除验收。
 - 清理调用链：`ComputerRemoval.cs` -> `TelemetryRemoval.cs`（先落标记和撤权）-> `TerminalBroker.RemoveComputer` -> `NotificationStore.RemoveComputer` -> SQLite 全部目标行。`ComputerRemovalWorker` 自动续清失败任务；`WithComputer` 保护迟到的通知写入/观察和终端创建/领取，避免清理后重建。保留空 enrollment_active 行及迁移标记，禁止启动时重新导入已撤销引导凭据。
 - 浏览器证据：`output/computer-removal-20261020/`，仅内置浏览器、本地明确标注样本，检查移除确认/取消和通知/历史下拉。没有在浏览器实际移除线上或验证实例电脑；真实 DELETE、CSRF、密码和旧凭据 401 由临时 Kestrel 集成测试验证。

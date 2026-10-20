@@ -38,7 +38,7 @@ const date = (value: string) => new Date(value).toLocaleString('zh-CN', { hour12
     <section v-else-if="computer.loading" class="panel" aria-label="正在读取这台电脑的规则"><ElSkeleton :rows="4"/></section>
     <section v-else-if="!computer.ready" class="panel empty-state"><p>{{ computer.error || '这台电脑的规则尚未加载' }}</p><ElButton @click="refreshRules">重新读取规则</ElButton></section>
     <form v-else class="notification-form" :inert="computer.busy || undefined" @submit.prevent="saveRules">
-      <section class="panel notification-panel">
+      <section class="panel notification-panel" data-scroll-section="提醒规则">
         <div class="panel-heading"><div><h2>{{ computerName || '当前电脑' }} · 提醒规则 <span class="small-count">{{ computer.rules.length }} / 20</span></h2><p>仅对这台电脑生效。条件持续满足后发送一次。</p><p class="footnote">{{ computerId }}</p></div></div>
         <p v-if="!settings.enabled" class="muted">全局发送尚未开启，保存规则后还需开启通知。</p>
         <div class="notification-add"><label for="alert-metric" class="sr-only">新增提醒项目</label><ElSelect filterable fit-input-width id="alert-metric" v-model="choice"><ElOption value="__offline" label="停止上报"/><ElOption v-for="metric in choices" :key="metricId(metric)" :value="metricId(metric)" :label="props.label(metric) + ' · ' + ruleUnit(metric.unit)"/></ElSelect><ElButton :disabled="computer.rules.length >= 20" @click="addRule">添加规则</ElButton></div>
@@ -58,11 +58,11 @@ const date = (value: string) => new Date(value).toLocaleString('zh-CN', { hour12
         <div class="form-actions"><ElButton type="primary" :disabled="computer.busy || !rulesDirty" native-type="submit">{{ computer.busy ? '保存中…' : '保存这台电脑的规则' }}</ElButton><span :class="computer.error || computer.saveError ? 'danger' : 'muted'">{{ computer.saveError || computer.error || (rulesDirty ? '有未保存的规则 · 切换电脑后保留草稿' : '规则已同步') }}</span></div>
       </section>
     </form>
-    <section v-if="computerId && computer.ready" class="panel notification-panel"><div class="panel-heading"><div><h2>{{ computerName || '当前电脑' }} · 发送记录</h2><p>仅显示这台电脑 · 近 7 天 · 请求间隔至少 60 秒</p></div><ElButton type="primary" link @click="refreshRules">刷新</ElButton></div><p v-if="!computer.events.length" class="empty-state">这台电脑暂无发送记录</p>
+    <section v-if="computerId && computer.ready" class="panel notification-panel" data-scroll-section="发送记录"><div class="panel-heading"><div><h2>{{ computerName || '当前电脑' }} · 发送记录</h2><p>仅显示这台电脑 · 近 7 天 · 请求间隔至少 60 秒</p></div><ElButton type="primary" link @click="refreshRules">刷新</ElButton></div><p v-if="!computer.events.length" class="empty-state">这台电脑暂无发送记录</p>
       <article v-for="event in computer.events" :key="event.id" class="notification-event"><div class="notification-event-heading"><strong>{{ event.title }}</strong><ElTag disable-transitions :type="event.status === 'accepted' ? 'success' : 'info'" effect="plain">{{ statusText[event.status] ?? event.status }}</ElTag><time>{{ date(event.createdAt) }}</time></div><p v-if="event.detail" class="footnote">{{ event.detail }}</p><ElCollapse class="help-details"><ElCollapseItem title="提醒内容" name="details"><p class="notification-description">{{ event.description }}</p></ElCollapseItem></ElCollapse></article>
     </section>
     <form class="notification-form" :inert="busy || undefined" @submit.prevent="save">
-      <section class="panel notification-panel">
+      <section class="panel notification-panel" data-scroll-section="发送渠道">
         <div class="panel-heading"><div><h2>全局发送渠道</h2><p>所有电脑共用 SendKey、发送开关和每日额度，提醒规则分别配置。</p></div><ElSwitch v-model="settings.enabled" active-text="开启通知" aria-label="开启通知"/></div>
         <div class="notification-fields"><label>SendKey<ElInput v-model="sendKey" type="password" autocomplete="new-password" maxlength="203" placeholder="SCT 开头的密钥" :disabled="clearCredential"/><small>{{ settings.hasCredential ? '已配置，留空保留。' : '尚未配置。' }} <a href="https://sct.ftqq.com/" target="_blank" rel="noopener noreferrer">获取密钥</a></small></label><label>每日请求上限<ElInput v-model.number="settings.dailyLimit" type="number" min="1" max="1000" required/><small>{{ budgetDate }} 已用 {{ requestsToday }} 次（北京时间）</small></label></div>
         <div class="notification-actions"><ElCheckbox v-model="clearCredential" @change="sendKey = ''">清除已存密钥</ElCheckbox><ElButton :disabled="busy || !settings.hasCredential || !!sendKey || clearCredential" @click="test">发送测试通知</ElButton></div>
@@ -71,6 +71,6 @@ const date = (value: string) => new Date(value).toLocaleString('zh-CN', { hour12
         <div class="form-actions"><ElButton type="primary" :disabled="busy || !dirty" native-type="submit">{{ busy ? '保存中…' : '保存发送设置' }}</ElButton><span :class="dirty ? 'draft-state' : error ? 'danger' : 'muted'">{{ dirty ? '全局发送设置有未保存的修改' : error ? '发送设置更新失败' : '全局发送设置已同步' }}</span></div>
       </section>
     </form>
-    <section v-if="events.length" class="panel notification-panel"><div class="panel-heading"><div><h2>渠道测试与旧版记录</h2><p>全局测试，以及迁移前无法确认电脑归属的记录。</p></div></div><article v-for="event in events" :key="event.id" class="notification-event"><div class="notification-event-heading"><strong>{{ event.title }}</strong><ElTag disable-transitions effect="plain">{{ statusText[event.status] ?? event.status }}</ElTag><time>{{ date(event.createdAt) }}</time></div><p v-if="event.detail" class="footnote">{{ event.detail }}</p></article></section>
+    <section v-if="events.length" class="panel notification-panel" data-scroll-section="渠道记录"><div class="panel-heading"><div><h2>渠道测试与旧版记录</h2><p>全局测试，以及迁移前无法确认电脑归属的记录。</p></div></div><article v-for="event in events" :key="event.id" class="notification-event"><div class="notification-event-heading"><strong>{{ event.title }}</strong><ElTag disable-transitions effect="plain">{{ statusText[event.status] ?? event.status }}</ElTag><time>{{ date(event.createdAt) }}</time></div><p v-if="event.detail" class="footnote">{{ event.detail }}</p></article></section>
   </template>
 </template>
