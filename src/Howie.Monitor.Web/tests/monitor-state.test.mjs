@@ -59,6 +59,27 @@ test('logout prevents an in-flight computer response from restoring private tele
   } finally { h.close() }
 })
 
+test('initial loading waits for one coherent set of curves and requests those curves concurrently', async () => {
+  const cpu = deferred(), memory = deferred(), requested = []
+  const h = await harness({ getLatest: async id => ({ ...latest(id), sample: { ...latest(id).sample,
+    metrics: [...latest(id).sample.metrics, { key: 'memory.usage', deviceId: 'memory', unit: '%', value: 40 }] } }),
+    getHistory: async (id, key) => { requested.push(key); return key === 'cpu.usage' ? cpu.promise : memory.promise } })
+  try {
+    const starting = h.start(); await tick()
+    assert.equal(h.monitor.initializing.value, true)
+    assert.equal(h.monitor.computerLoading.value, true)
+    assert.deepEqual(requested, ['cpu.usage', 'memory.usage'])
+    cpu.resolve([{ value: 10 }]); await tick()
+    assert.equal(Object.keys(h.monitor.history.value).length, 0)
+    assert.equal(h.monitor.initializing.value, true)
+    memory.resolve([{ value: 40 }]); await starting
+    assert.equal(h.monitor.initializing.value, false)
+    assert.equal(h.monitor.computerLoading.value, false)
+    assert.equal(h.monitor.history.value['cpu/total:cpu.usage'][0].value, 10)
+    assert.equal(h.monitor.history.value['memory:memory.usage'][0].value, 40)
+  } finally { h.close() }
+})
+
 test('the real computer selector renders distinct accessible choices and independent status', async () => {
   const server = await createServer({ server: { middlewareMode: true, hmr: false }, logLevel: 'error' })
   try {

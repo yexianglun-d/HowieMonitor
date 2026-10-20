@@ -8,6 +8,7 @@ export function useMonitor(initialComputerId = '') {
   const connectionError = ref(''), authError = ref(''), device = ref<Device | null>(null), latest = ref<Latest | null>(null)
   const error = computed(() => authError.value || connectionError.value)
   const computers = ref<ComputerSummary[]>([]), selectedComputerId = ref(initialComputerId)
+  const computerLoading = ref(false)
   const history = ref<Record<string, HistoryPoint[]>>({}), activeMetric = ref<Metric | null>(null), now = ref(Date.now())
   let timer: ReturnType<typeof setTimeout> | undefined, clock: ReturnType<typeof setInterval> | undefined
   let controller: AbortController | null = null, generation = 0, serverFetchedAt = 0
@@ -33,12 +34,13 @@ export function useMonitor(initialComputerId = '') {
   function selectComputer(id: string) {
     if (id === selectedComputerId.value || !computers.value.some(computer => computer.deviceId === id)) return
     // 切换先取消并清空旧快照，迟到响应由 generation 拒绝，避免混入另一台电脑的值。
-    stop(); selectedComputerId.value = id; clearComputer(); connectionError.value = ''; void poll()
+    stop(); selectedComputerId.value = id; clearComputer(); computerLoading.value = true; connectionError.value = ''; void poll()
   }
   async function poll() {
     if (!authenticated.value) return
     const currentGeneration = generation
     const requestController = new AbortController(); controller = requestController
+    if (!device.value) computerLoading.value = true
     try {
       const result = await api.getComputers(requestController.signal)
       if (currentGeneration !== generation) return
@@ -50,17 +52,21 @@ export function useMonitor(initialComputerId = '') {
       if (currentGeneration !== generation) return
       device.value = newDevice; latest.value = newLatest; serverFetchedAt = Date.now(); connectionError.value = ''
       const tracked = [...highlights.value, activeMetric.value].filter((metric): metric is Metric => metric !== null)
-      for (const metric of tracked) {
-        const points = await api.getHistory(computerId, metric.key, metric.deviceId, metric.unit, requestController.signal)
-        if (currentGeneration !== generation) return
-        history.value[`${metric.deviceId}:${metric.key}`] = points
-      }
+      const histories = await Promise.all(tracked.map(async metric => [
+        `${metric.deviceId}:${metric.key}`, await api.getHistory(computerId, metric.key, metric.deviceId, metric.unit, requestController.signal),
+      ] as const))
+      if (currentGeneration !== generation) return
+      // 同一次采样的曲线一起提交，避免刷新时逐张卡片补齐造成视觉重排。
+      history.value = { ...history.value, ...Object.fromEntries(histories) }
     } catch (err) {
       if (currentGeneration !== generation || (err instanceof DOMException && err.name === 'AbortError')) return
       if (err instanceof ApiError && err.status === 401) { authenticated.value = false; computers.value = []; selectedComputerId.value = ''; clearComputer() }
       connectionError.value = err instanceof Error ? err.message : '无法连接监控服务。'
     } finally {
-      if (currentGeneration === generation && authenticated.value) timer = setTimeout(poll, document.hidden ? 10000 : 2000)
+      if (currentGeneration === generation) {
+        computerLoading.value = false
+        if (authenticated.value) timer = setTimeout(poll, document.hidden ? 10000 : 2000)
+      }
     }
   }
   async function signIn(password: string) {
@@ -84,5 +90,5 @@ export function useMonitor(initialComputerId = '') {
     finally { initializing.value = false }
   })
   onUnmounted(() => { stop(); clearInterval(clock); document.removeEventListener('visibilitychange', visibility) })
-  return { computers, selectedComputerId, selectComputer, authenticated, setupRequired, initializing, busy, error, connectionError, device, latest, metrics, history, activeMetric, dataStatus, connectionStatus, cpu, gpu, memory, disk, signIn, signOut, find }
+  return { computers, selectedComputerId, selectComputer, authenticated, setupRequired, initializing, computerLoading, busy, error, connectionError, device, latest, metrics, history, activeMetric, dataStatus, connectionStatus, cpu, gpu, memory, disk, signIn, signOut, find }
 }
