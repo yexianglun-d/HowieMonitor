@@ -2,9 +2,9 @@
 
 ## 下次继续
 
-- 本轮 GPU 修复已完成本地验证，尚待部署：旧版把第一条 AMD 核显 0% 显示为电脑的 GPU 占用，忽略已上报的 RTX 5070 Ti 5%。用户明确选择逐显卡名称、占用与曲线；不要改成只显示独显、最高值或多显卡相加。
+- GPU 修复 `e7be1af` 已验证并部署：旧版把第一条 AMD 核显 0% 显示为电脑的 GPU 占用，忽略已上报的 RTX 5070 Ti 5%。用户明确选择逐显卡名称、占用与曲线；不要改成只显示独显、最高值或多显卡相加。
 - `ComputerSummary.gpus` 是逐显卡列表，旧 `gpuPercent` 仅在单显卡时保留；前后端按硬件 ID 分组，组内优先可用 `GPU Core`，不可用时使用 `D3D 3D` 并明确标为 3D 引擎占用。保留原始指标 key，显存/总线/功耗百分比不能作为核心占用。
-- 先运行 `git status --short --branch` 与 `git log -5 --oneline`。应用代码 `42b30e6` 已于 2026-10-20 部署至 `https://monitor.howied.me/`，包含此前 Toast、温度展示、多电脑总览与独立通知规则；本地提交尚未推送 GitHub。
+- 先运行 `git status --short --branch` 与 `git log -5 --oneline`。应用代码 `e7be1af` 已于 2026-10-20 部署至 `https://monitor.howied.me/`，包含逐显卡修复及此前 Toast、温度展示、多电脑总览与独立通知规则；本地提交尚未推送 GitHub。
 - 总览默认路由 `#computers`，各卡片直接进入对应电脑的总览/通知。`/api/notifications/computer?computerId=...` 必须明确电脑归属；全局 `/api/notifications` 只管理共用发送渠道与无归属旧记录。
 - `NotificationStore` 一次性把旧规则复制给当时已接入的电脑；迁移标记持久化，新增电脑默认空规则。不能重跑迁移、把旧任务强行猜测归属，或让保存 A 清空 B 的观察状态。
 - 用户反馈“温度都没有”：排查时确认旧版页面只按英文原名搜索，中文“温度”返回 0 项；实际 CPU 上报驱动缺失，其他 GPU/SSD 有可用读数。搜索与展示问题已随新版部署，驱动问题仍独立存在。
@@ -13,9 +13,10 @@
 
 ## 当前部署
 
-- 服务器上的 `howie-monitor` Docker 容器配置保持原样；`/opt/howie-monitor/current` 指向 `/opt/howie-monitor/releases/20261020-42b30e6`，数据位于 `/var/lib/howie-monitor`。
+- 服务器上的 `howie-monitor` Docker 容器配置保持原样；`/opt/howie-monitor/current` 指向 `/opt/howie-monitor/releases/20261020-e7be1af`，数据位于 `/var/lib/howie-monitor`。
 - 已验证备份：`/opt/howie-monitor/backups/monitor-20261020-052017.tar.gz`，SHA-256 为 `4c37e74819873edea788ee205d8baf42817d6b17322d5659ab1cc7a4bc8b6ad8`，同目录保留 `.sha256` 和 `.verified.json`。备份停服约 19.43 秒，正式版本切换约 3.4 秒。
 - 原版本保留于 `/opt/howie-monitor/releases/20261019-133500/Howie.Monitor.Server-0.1.0-linux-x64-20261019-132130`；部署清单、演练与切换结果位于服务器 `/opt/howie-monitor/staging/deploy-42b30e6-20261020/`。凭据和数据库仅保留在服务器受限目录，项目日志不记录密码。
+- GPU 修复的上一个版本为 `/opt/howie-monitor/releases/20261020-42b30e6`，切换耗时约 2.51 秒。发布和验证结果位于 `/opt/howie-monitor/staging/deploy-gpus-20261020/`；无网络演练容器和临时数据已清理。此次没有数据格式迁移，回退到 `42b30e6` 只需切换应用版本，不能覆盖通知或历史数据。
 - 旧通知 JSON 已一次性迁移为 4 个独立规则列表，各保留原来的 1 条规则。回退旧版本前必须评估新旧通知结构；不能直接覆盖旧快照而重放通知或重置已消耗预算，也不能重跑迁移覆盖用户后续编辑。
 - 部署后真实在线电脑采样序号持续增长，历史数据继续写入；其他 3 台原有离线电脑的最后采样仍保留。未主动发送真实测试通知。
 - 按用户偏好使用内置浏览器；此前本任务启动的 3 个 Playwright Chrome 会话已关闭，后续不要再批量启动外部 Chrome。
@@ -42,3 +43,4 @@
 - Windows 构建、测试和发布遵循 `BUILDING.md` 与 `global.json`。
 - 本次真实数据浏览器证据位于忽略目录 `output/playwright/temperatures/`；前次同步证据在 `output/playwright/sync-20261020/`。
 - 多电脑与规则隔离的浏览器证据位于 `output/playwright/multi-computer/`，使用隔离本地实例和明确标识的合成采样；发送渠道关闭，无真实通知请求。
+- GPU 真实指标回放与部署证据在忽略目录 `.local/gpu-verification-20261020/`、`.local/deploy-gpus-20261020/`；只保存 GPU 指标和非敏感验证结果，没有生产数据库或真实密钥。内置浏览器截图连接仍超时，未完成此次线上视觉复核。
