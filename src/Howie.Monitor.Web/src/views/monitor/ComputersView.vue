@@ -62,7 +62,7 @@ dd { margin: 5px 0 0; font-family: var(--mono); font-variant-numeric: tabular-nu
 .fleet-usage dd { font-size: 21px; white-space: nowrap }
 .fleet-temperatures { margin: 0; border-top: 1px solid var(--border); flex: 1 }
 .fleet-gpus { margin: 0 0 14px; border-top: 1px solid var(--border) }
-.fleet-temperatures > div, .fleet-gpus > div { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding-top: 13px }
+.fleet-temperatures > div, .fleet-gpus > div { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding-top: 13px }
 .fleet-temperatures dt, .fleet-gpus dt { min-width: 0; overflow-wrap: anywhere }
 .fleet-temperatures small, .fleet-gpus small { display: block; font-size: 11px; overflow-wrap: anywhere; margin-top: 2px }
 .fleet-temperatures dd, .fleet-gpus dd { flex-shrink: 0; margin: 0; color: var(--accent); font-size: 16px }

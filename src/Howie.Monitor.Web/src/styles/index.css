@@ -140,18 +140,19 @@ tbody tr:last-child td { border-bottom: 0 }
 .detail-chart { scroll-margin-top: 24px }
 .detail-tools { display: flex; align-items: center; gap: 16px }
 .detail-tools .muted { flex-shrink: 0; white-space: nowrap }
-.detail-tools input { flex: 1; max-width: 480px }
+.detail-tools .el-input { flex: 1; min-width: 0 }
 .metric-detail-group { padding: 0 var(--panel-inset) }
 .metric-detail-group > summary { cursor: pointer; padding: 18px 0; font-size: 15px; font-weight: 550 }
 .metric-detail-group > summary > span { float: right; font-size: 12px; font-weight: 400; color: var(--muted) }
-.metric-row { display: grid; grid-template-columns: minmax(0, 1fr) 130px; gap: 16px; align-items: start; padding: 10px 0; border-top: 1px solid var(--border) }
-.metric-row-choice { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-width: 0; min-height: 52px; text-align: left; padding: 8px 0; border-radius: 6px }
+/* 名称、读数和来源共用首行基线，状态换行或说明展开时不改变对齐关系。 */
+.metric-row { display: grid; grid-template-columns: minmax(0, 1fr) 130px; gap: 16px; align-items: baseline; padding: 10px 0; border-top: 1px solid var(--border) }
+.metric-row-choice { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; min-width: 0; min-height: 52px; text-align: left; padding: 8px 0; border-radius: 6px }
 .metric-row-choice > span { min-width: 0; overflow-wrap: anywhere }
 .metric-row-choice small { display: block; font-size: 12px; color: var(--muted); margin-top: 4px }
 .metric-row-choice strong { font: 15px var(--mono); color: #c7e4d1; white-space: nowrap; flex-shrink: 0 }
 .metric-row.selected .metric-row-choice { background: #263c2f }
 .metric-row-choice:hover { background: #222f27 }
-.metric-meta { color: var(--muted); font-size: 12px; padding-top: 10px; overflow-wrap: anywhere }
+.metric-meta { color: var(--muted); font-size: 12px; overflow-wrap: anywhere }
 .metric-meta summary { cursor: pointer; min-height: 40px }
 .metric-meta p { padding: 4px 0; line-height: 1.7 }
 .hardware-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--section-gap); align-items: stretch }
@@ -338,7 +339,6 @@ tbody tr:last-child td { border-bottom: 0 }
   .metric-row { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 8px 0 }
   .metric-row-choice { padding: 8px 0; gap: 10px; font-size: 13px }
   .metric-row-choice strong { font-size: 14px }
-  .metric-meta { padding: 0 6px }
   .metric-meta summary { min-height: 28px }
   .detail-chart, #peak-processes { scroll-margin-top: 112px }
   .hardware-grid { grid-template-columns: minmax(0, 1fr); gap: 14px }

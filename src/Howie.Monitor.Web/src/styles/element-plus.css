@@ -37,6 +37,8 @@ html.dark {
 .el-button--primary:not(.is-link):not(.is-text):not(.is-plain) { --el-button-text-color: #12251e; --el-button-hover-text-color: #12251e; --el-button-active-text-color: #12251e }
 .el-button + .el-button { margin-left: 0 }
 .el-input, .el-select { min-width: 0; width: 100% }
+/* ElInput 的外框已有焦点反馈，内层不重复绘制一圈错位轮廓。 */
+.el-input .el-input__inner:focus-visible { outline: none }
 .el-collapse { --el-collapse-header-bg-color: transparent; --el-collapse-content-bg-color: transparent; border: 0 }
 .el-collapse-item__header { font-weight: 500; text-align: left; line-height: 1.6; height: auto; min-height: 44px }
 .el-collapse-item__wrap { border: 0 }

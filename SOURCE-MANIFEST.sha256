@@ -92,8 +92,8 @@ a09115b4943c401c5f3d2a27b6665415acaaa25137eff91a91f1acfaaf0d1f88  src/Howie.Moni
 e8b33d6399446b98e5d855e79169a106980d85daee514f84a3490f7556cc2510  src/Howie.Monitor.Web/src/composables/usePageMotion.ts
 c384412489457d078a9aa31a5595a7951d0b4fbe5d1aab63f498e9902d348e13  src/Howie.Monitor.Web/src/composables/useToast.ts
 90b22fe70c3901f17f7ca8a187a3084933e60fe379488298076be4d240afab4c  src/Howie.Monitor.Web/src/main.ts
-a7cbd8c01b298327c5194762e5aef202809fe5651a4f16941c2a6cb9c778a857  src/Howie.Monitor.Web/src/styles/element-plus.css
-12a1e4945ac6ff87f0e0cacfa8ceaba64acbd2bb4b60fa8619698a9b02a3b035  src/Howie.Monitor.Web/src/styles/index.css
+a320036a03b4016390958c6937d538dcb521dc83443a86f74cf41164e61168ed  src/Howie.Monitor.Web/src/styles/element-plus.css
+51d08e97bc04e02e2f6dfe146b1df71902638fee18f840347dacb395fb6e0965  src/Howie.Monitor.Web/src/styles/index.css
 7630c18f6461698144d7899189a2de46aff1d98d22acd51e57d46a2c5723c9aa  src/Howie.Monitor.Web/src/types/enrollment.ts
 1032facb66eb6e5858653a887a2dcfe73f1a232e24383b57741fedc43cb72eee  src/Howie.Monitor.Web/src/types/monitor.ts
 2917d7734ce070a167347a6ce75deb74eb3801feeef7c05f5debbf09818791a5  src/Howie.Monitor.Web/src/types/notifications.ts
@@ -103,7 +103,7 @@ bb98165736dccc795409eca4bf0527c0ef38a8e46e3ea7246c9d75b732c0a6b6  src/Howie.Moni
 b1597c9734f20ebe4fe956d7d51e24c10d205fce0f9efd8317186e0f1ff73173  src/Howie.Monitor.Web/src/utils/location.ts
 80f632b52932c327ddf55993f9b1dc33a562816b0715f8992168e9cd02ac7ae0  src/Howie.Monitor.Web/src/utils/notificationUnits.ts
 36511d37d56ab299084ee6e778ad61ee6029c670cbb72ecc0f2d3f300fe45412  src/Howie.Monitor.Web/src/utils/temperatures.ts
-07deae04b53c3cf68d9b78c2ac08f7bf0342bad63e76c2562a949b3fe84cc4ab  src/Howie.Monitor.Web/src/views/monitor/ComputersView.vue
+6c3d8a856f78de323fae33978c4dfc92ff6ee1f16c0a05e4607d0865af2dec09  src/Howie.Monitor.Web/src/views/monitor/ComputersView.vue
 7d577f3d18486809cfeaac600d617960e4fbd2557d3f7e87ee2466c8f73f6a89  src/Howie.Monitor.Web/src/views/monitor/EnrollmentView.vue
 bcc7a521dff1c61106f7a5ec8505b23e390ed40989ea9003a48cbf011dd9f0f3  src/Howie.Monitor.Web/src/views/monitor/HardwareView.vue
 725467519ce5625fc759b4ef052d8af7fdf7b09e4a23e54c15dd0652ccd0e7a3  src/Howie.Monitor.Web/src/views/monitor/HistoryView.vue
