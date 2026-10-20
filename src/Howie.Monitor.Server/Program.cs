@@ -23,6 +23,8 @@ builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.C
 builder.Services.AddSingleton(new CredentialStore(dataDirectory));
 builder.Services.AddSingleton(new TelemetryStore(dataDirectory));
 builder.Services.AddHostedService<HistoryMaintenanceWorker>();
+builder.Services.AddSingleton<TerminalBroker>();
+builder.Services.AddHostedService<TerminalMaintenanceWorker>();
 builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(dataDirectory, "keys")));
 builder.Services.AddSingleton(provider => new NotificationStore(dataDirectory, provider.GetRequiredService<IDataProtectionProvider>(),
     provider.GetRequiredService<TelemetryStore>().Computers(DateTimeOffset.UtcNow).Select(computer => computer.DeviceId).ToArray()));
@@ -91,6 +93,8 @@ app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
+app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(10), KeepAliveTimeout = TimeSpan.FromSeconds(20) });
+TerminalEndpoints.Map(app, hosting, Csrf);
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok" }));
 app.MapGet("/api/auth/session", (HttpContext context, CredentialStore credentials) =>
     Results.Ok(new { authenticated = context.User.Identity?.IsAuthenticated == true, setupRequired = !credentials.IsSetup }));

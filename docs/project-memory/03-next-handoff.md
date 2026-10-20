@@ -2,13 +2,20 @@
 
 ## 下次继续
 
+- 优先处理新管理员终端的 Windows 11 实机验收：源码和本地协议/UI 检查已完成，功能默认关闭，未部署、未发布安装包。不要直接使用以前的“只换服务器资源”流程声明此功能可用；这次必须升级 Windows 采集端，并在安装向导显式勾选本机授权。
+- 用户已选择当前已登录的管理员账号，不保存 Windows 密码，注销后不可用。授权绑定安装账号 SID；必须有真实提升令牌，拒绝 SYSTEM/服务身份；切换电脑或离开终端页结束会话，断线不重连、不重放输入。逐项验收步骤见 `docs/terminal-acceptance.md`。
+- 关键代码：Contracts `Terminal.cs`；Server `TelemetryTerminal.cs`、`TerminalBroker.cs`、`TerminalEndpoints.cs`；Agent `AdminTerminalIdentity.cs`、`WindowsAdminTerminal.cs`、`TerminalWorker.cs`；Web `TerminalView.vue`、`useTerminal.ts` 与 API。终端视图按电脑 ID 销毁重建，不能仅 reset xterm 后保留异步输出队列。
+- 终端验证：51 项前端、26 项终端、73 项既有服务端子集、20 项 Python；Agent/Server/Setup 编译通过。Setup 的 macOS 参考程序集/锁文件差异通过 `.local/terminal-windows-reference.targets` 和 `.local/terminal-setup.packages.lock.json` 作隔离编译验证，正式 Windows 锁文件未改；真实提权、Ctrl+C、注销、断网与子进程清理仍待验收。
+- 内置浏览器 UI 检查仅用本地协议模拟器，未执行真实命令。临时模拟器已停止，截图/日志位于 `output/terminal-20261020/`；没有启动外部 Chrome，也没有访问生产服务器。反向代理需要模板中的 WebSocket Upgrade 路由，隐私说明已涵盖终端输入/输出由运营者服务器转发。
+- 推送状态校正：本轮开始时 `main` 与 `origin/main` 同为 `34949f0`，以下旧条目中“尚未推送”是历史记录，不代表当前旧版本未同步。新终端本轮尚未部署。
+
 - 指标行补丁 `7ab7225` 已完成本地验证并部署：数值和来源同一首行基线，原因展开不改变位置；手机端来源与名称同左边界。电脑总览的显卡/温度行同样使用基线；搜索框改为外层控件布局，内层左右留白一致，焦点反馈保留在外框。不要只检查页面标题就声明内容对齐。
 - 补丁证据在忽略目录 `output/metric-row-alignment-20261020/`：20 个逻辑处理器、共 31 项指标、长名称/缺失值/展开原因、桌面和平板/手机布局，均为隔离合成样本。实际通知与生产配置没有被测试修改。
 - 本轮菜单视觉对齐与柔和动效 `e9b76d0` 已通过隔离实例验收并部署：统一内容边界、标题、面板内边距、工具栏/操作区；删除卡片上浮/缩放与图表独立入场。页面整体 4px / 220ms，实时刷新不重播，键盘和减少动态效果模式无位移。
 - 内置浏览器新建本地标签可正常使用；本轮没有启动外部 Chrome。390 / 1024 / 1280 / 1920px 的 8 个菜单、实际保存 Toast 与帧采样证据保存在忽略目录 `output/alignment-motion-20261020/`，均为明确标识的隔离合成采样。
 - GPU 修复 `e7be1af` 已验证并部署：旧版把第一条 AMD 核显 0% 显示为电脑的 GPU 占用，忽略已上报的 RTX 5070 Ti 5%。用户明确选择逐显卡名称、占用与曲线；不要改成只显示独显、最高值或多显卡相加。
 - `ComputerSummary.gpus` 是逐显卡列表，旧 `gpuPercent` 仅在单显卡时保留；前后端按硬件 ID 分组，组内优先可用 `GPU Core`，不可用时使用 `D3D 3D` 并明确标为 3D 引擎占用。保留原始指标 key，显存/总线/功耗百分比不能作为核心占用。
-- 先运行 `git status --short --branch` 与 `git log -5 --oneline`。应用代码 `7ab7225` 已于 2026-10-20 部署至 `https://monitor.howied.me/`，包含行内对齐补丁、视觉对齐、柔和动效、逐显卡修复及此前功能；本地提交尚未推送 GitHub。
+- 先运行 `git status --short --branch` 与 `git log -5 --oneline`。应用代码 `7ab7225` 已于 2026-10-20 部署至 `https://monitor.howied.me/`，包含行内对齐补丁、视觉对齐、柔和动效、逐显卡修复及此前功能；此前相关提交已推送至 GitHub，见本页上方的状态校正。
 - 总览默认路由 `#computers`，各卡片直接进入对应电脑的总览/通知。`/api/notifications/computer?computerId=...` 必须明确电脑归属；全局 `/api/notifications` 只管理共用发送渠道与无归属旧记录。
 - `NotificationStore` 一次性把旧规则复制给当时已接入的电脑；迁移标记持久化，新增电脑默认空规则。不能重跑迁移、把旧任务强行猜测归属，或让保存 A 清空 B 的观察状态。
 - 用户反馈“温度都没有”：排查时确认旧版页面只按英文原名搜索，中文“温度”返回 0 项；实际 CPU 上报驱动缺失，其他 GPU/SSD 有可用读数。搜索与展示问题已随新版部署，驱动问题仍独立存在。

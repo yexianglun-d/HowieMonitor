@@ -80,6 +80,11 @@ public sealed class CredentialStore
     }
 
     public bool ValidSession(string? stamp) { lock (_gate) return !string.IsNullOrEmpty(stamp) && _user?.Sessions.TryGetValue(stamp, out var expiry) == true && expiry > DateTimeOffset.UtcNow; }
+    public bool VerifyPassword(string? password)
+    {
+        lock (_gate) return _user is not null && password is { Length: > 0 and <= 128 }
+            && _hasher.VerifyHashedPassword("owner", _user.PasswordHash, password) != PasswordVerificationResult.Failed;
+    }
     public void Logout(string? stamp) { lock (_gate) { if (stamp is not null && _user is not null && _user.Sessions.Remove(stamp)) Save(); } }
     private void Save() => WritePrivate(_userFile, JsonSerializer.Serialize(_user, ProtocolJson.Options));
     private static void WritePrivate(string path, string content)

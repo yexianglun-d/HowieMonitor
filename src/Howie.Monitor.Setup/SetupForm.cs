@@ -20,6 +20,7 @@ public sealed class SetupForm : Form
     private readonly Label _serviceProgress = new(), _registrationProgress = new(), _heartbeatProgress = new(), _dataProgress = new(), _activationProgress = new();
     private readonly TextBox _code = new() { Width = 330, MaxLength = 40, Font = new("Consolas", 18) };
     private readonly CheckBox _confirm = new() { AutoSize = true, Text = "我已阅读隐私说明，确认将这台电脑的监控数据上传至上述服务，并按绑定码指定的方式接入。", ForeColor = Color.FromArgb(230, 232, 228) };
+    private readonly CheckBox _allowTerminal = new() { AutoSize = true, Text = "允许私人面板使用当前登录的本账号运行管理员 PowerShell。远程命令可修改文件和系统设置；注销后不可用，不保存 Windows 密码。", ForeColor = Color.FromArgb(230, 232, 228) };
     private readonly CheckBox _removeData = new() { AutoSize = true, Text = "同时删除本地配置、令牌和缓存（无法撤回）", ForeColor = Color.FromArgb(230, 232, 228) };
     private readonly List<Label> _steps = [];
     private readonly bool _uninstall;
@@ -70,9 +71,9 @@ public sealed class SetupForm : Form
         ResumeLayout(true);
         // 页面内容在切换时才创建，按当前 DPI 换算间距，避免与窗体的初始缩放重复。
         _code.Margin = Spacing(0, 0, 0, 16); _code.Width = LogicalToDeviceUnits(330);
-        _confirm.Margin = _removeData.Margin = Spacing(0, 0, 0, 16);
-        _confirm.CheckAlign = _removeData.CheckAlign = ContentAlignment.TopLeft;
-        _confirm.TextAlign = _removeData.TextAlign = ContentAlignment.TopLeft;
+        _allowTerminal.Margin = _confirm.Margin = _removeData.Margin = Spacing(0, 0, 0, 16);
+        _allowTerminal.CheckAlign = _confirm.CheckAlign = _removeData.CheckAlign = ContentAlignment.TopLeft;
+        _allowTerminal.TextAlign = _confirm.TextAlign = _removeData.TextAlign = ContentAlignment.TopLeft;
         _next = Button("开始检查", async (_, _) => await Next()); _next.BackColor = Accent; _next.ForeColor = BackgroundColor;
         _back = Button("上一步", (_, _) => RequestNavigation(_step == 5 ? 3 : _step - 1));
         _rebind = Button("重新绑定", (_, _) => RequestNavigation(2));
@@ -158,6 +159,7 @@ public sealed class SetupForm : Form
                 else TextLine("新增接入不会停止其他电脑的采集。");
                 if (_credentialExpiresAt.HasValue) TextLine($"本次接入授权有效至 {_credentialExpiresAt.Value.ToLocalTime():HH:mm}。若已过期或在网页撤销，请点击“重新绑定”。");
                 _content.Controls.Add(Button("隐私说明", (_, _) => PackageContents.ShowPrivacy(this)));
+                _content.Controls.Add(_allowTerminal);
                 _content.Controls.Add(_confirm); _next.Text = "安装并启动"; break;
             case 4:
                 _title.Text = "安装后台服务"; _description.Text = "校验载荷、保存私有配置并启动采集。";
@@ -281,6 +283,7 @@ public sealed class SetupForm : Form
                     if (status.ComputerName == Environment.MachineName)
                     {
                         _plan = new(configuration, status.State == "active" ? null : marker.RequestId, SetupPaths.CurrentSid, null);
+                        _allowTerminal.Checked = configuration.Terminal is { Enabled: true } access && access.UserSid == SetupPaths.CurrentSid;
                         if (status.State == "active") _existingConfiguration = configuration;
                         ShowStep(3); _status.Text = "检测到本产品安装，将修复/升级并保留配置和设备身份。"; return;
                     }
@@ -306,7 +309,7 @@ public sealed class SetupForm : Form
             {
                 var status = await _client.Status(saved.Plan.Configuration.Token, _cancellation.Token);
                 if (status.ComputerName == Environment.MachineName && status.State is "ready" or "waiting" or "active")
-                { _plan = saved.Plan; _previousComputer = saved.PreviousComputer; _credentialExpiresAt = saved.ExpiresAt; ShowStep(3); _status.Text = "已恢复上次安装请求，可以继续。"; return; }
+                { _plan = saved.Plan; _allowTerminal.Checked = saved.Plan.Configuration.Terminal is { Enabled: true } access && access.UserSid == SetupPaths.CurrentSid; _previousComputer = saved.PreviousComputer; _credentialExpiresAt = saved.ExpiresAt; ShowStep(3); _status.Text = "已恢复上次安装请求，可以继续。"; return; }
             }
             catch (SetupCredentialException) { ClearPendingFiles(); }
         }
@@ -351,6 +354,7 @@ public sealed class SetupForm : Form
         _status.Text = "正在核对接入授权，随后请求管理员权限…";
         await _client.Status(_plan.Configuration.Token, _cancellation.Token);
         _status.Text = "正在安装…请完成 Windows 管理员授权。";
+        _plan = _plan with { Configuration = _plan.Configuration with { Terminal = _allowTerminal.Checked ? new(true, _plan.OwnerSid) : null } };
         await _install(_plan, _cancellation.Token); _installed = true; ShowStep(5); await Verify();
     }
     private async Task Verify()

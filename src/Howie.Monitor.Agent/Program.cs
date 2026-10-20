@@ -34,4 +34,5 @@ builder.Services.AddSingleton(new HttpClient(new HttpClientHandler { AllowAutoRe
     DefaultRequestHeaders = { Authorization = new AuthenticationHeaderValue("Bearer", configuration.Token) } });
 builder.Services.AddHostedService<CollectionWorker>();
 builder.Services.AddHostedService<UploadWorker>();
+builder.Services.AddHostedService<TerminalWorker>();
 await builder.Build().RunAsync();

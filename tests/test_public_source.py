@@ -13,6 +13,7 @@ class PublicSourceTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name).resolve()
         for name in EXPORTER.ROOT_FILES:
+            (self.root / name).parent.mkdir(parents=True, exist_ok=True)
             (self.root / name).write_text('public\n', encoding='utf-8')
         (self.root / 'README.md').write_text('private operational notes', encoding='utf-8')
         for folder in EXPORTER.DIRECTORIES:
@@ -32,7 +33,8 @@ class PublicSourceTests(unittest.TestCase):
         files = EXPORTER.collect(self.root)
         self.assertEqual(files['README.md'].decode().splitlines(), ['public'])
         self.assertIn('src/App.cs', files)
-        self.assertFalse(any('/obj/' in path or path.startswith('docs/') for path in files))
+        self.assertIn('docs/terminal-acceptance.md', files)
+        self.assertFalse(any('/obj/' in path or path.startswith('docs/') and path != 'docs/terminal-acceptance.md' for path in files))
 
     def test_runtime_json_in_source_is_rejected(self):
         (self.root / 'src' / 'agent.json').write_text('{}', encoding='utf-8')

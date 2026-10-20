@@ -8,6 +8,8 @@ The Windows installer guides an authorized user through environment checks, a sh
 
 GPU usage is shown separately for each reported graphics adapter, with its model name and independent history curve. An idle integrated GPU does not hide a discrete GPU's load; missing readings remain unavailable.
 
+The source also includes an optional administrator PowerShell terminal, disabled by default. The updated installer must explicitly authorize its installing Windows account; that account must remain logged in and have an elevated administrator token. The panel rechecks its own password before connecting, and sessions are isolated by computer and browser login. Terminal input/output is relayed through the operator's server without persistent transcripts; this is not end-to-end encryption. Switching computers or leaving the page ends the session. No Windows password is saved, and commands never fall back to SYSTEM. See [privacy details](PRIVACY.md) and the [Windows acceptance procedure](docs/terminal-acceptance.md). This source implementation has passed protocol tests; actual Windows service/elevation acceptance is still required before release.
+
 This is an early personal project. Real service installation, repair, uninstall, reboot recovery, notification delivery and long-running stability are still undergoing acceptance testing. Do not treat a successful build as proof of those scenarios.
 
 ## Downloads and setup

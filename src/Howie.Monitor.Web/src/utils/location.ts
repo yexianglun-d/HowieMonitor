@@ -1,4 +1,4 @@
-export const pages = ['computers', 'overview', 'detail', 'processes', 'history', 'hardware', 'notifications', 'enrollment'] as const
+export const pages = ['computers', 'overview', 'detail', 'processes', 'history', 'hardware', 'notifications', 'terminal', 'enrollment'] as const
 export type Page = typeof pages[number]
 
 export function readLocation(hash: string) {

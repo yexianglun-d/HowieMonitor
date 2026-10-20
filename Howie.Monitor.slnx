@@ -10,5 +10,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/Howie.Monitor.Collector.Tests/Howie.Monitor.Collector.Tests.csproj" />
     <Project Path="tests/Howie.Monitor.Server.Tests/Howie.Monitor.Server.Tests.csproj" />
+    <Project Path="tests/Howie.Monitor.Terminal.Tests/Howie.Monitor.Terminal.Tests.csproj" />
   </Folder>
 </Solution>

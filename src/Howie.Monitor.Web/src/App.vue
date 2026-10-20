@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useMonitor } from './composables/useMonitor'
 import { useToast } from './composables/useToast'
 import { usePageMotion } from './composables/usePageMotion'
@@ -22,14 +22,15 @@ import TemperaturePanel from './views/monitor/components/TemperaturePanel.vue'
 import ComputersView from './views/monitor/ComputersView.vue'
 import type { Metric, HistoryMetric } from './types/monitor'
 
+const TerminalView = defineAsyncComponent(() => import('./views/monitor/TerminalView.vue'))
 const initial = readLocation(window.location.hash)
 const { computers, selectedComputerId, selectComputer, authenticated, setupRequired, initializing, computerLoading, busy, error, connectionError, device, latest, metrics, history, activeMetric, dataStatus, connectionStatus, cpu, gpus, memory, disk, signIn, signOut, find } = useMonitor(initial.query.get('computer') ?? '')
 const toast = useToast()
 const password = ref(''), view = ref(initial.page), pageRoot = ref<HTMLElement | null>(null), viewRoot = ref<HTMLElement | null>(null)
 const overviewTab = ref('CPU'), metricQuery = ref(''), detailChart = ref<HTMLElement | null>(null)
-const nav = [{ key: 'computers', title: '电脑总览', short: '电脑' }, { key: 'overview', title: '运行总览', short: '总览' }, { key: 'detail', title: '指标详情', short: '指标' }, { key: 'processes', title: '进程列表', short: '进程' }, { key: 'history', title: '历史记录', short: '历史' }, { key: 'hardware', title: '硬件信息', short: '硬件' }, { key: 'notifications', title: '通知设置', short: '通知' }, { key: 'enrollment', title: '电脑接入', short: '接入' }] as const
+const nav = [{ key: 'computers', title: '电脑总览', short: '电脑' }, { key: 'overview', title: '运行总览', short: '总览' }, { key: 'detail', title: '指标详情', short: '指标' }, { key: 'processes', title: '进程列表', short: '进程' }, { key: 'history', title: '历史记录', short: '历史' }, { key: 'hardware', title: '硬件信息', short: '硬件' }, { key: 'notifications', title: '通知设置', short: '通知' }, { key: 'terminal', title: '远程终端', short: '终端' }, { key: 'enrollment', title: '电脑接入', short: '接入' }] as const
 const title = computed(() => nav.find(item => item.key === view.value)!.title)
-const devicePage = computed(() => !['computers', 'history', 'notifications', 'enrollment'].includes(view.value))
+const devicePage = computed(() => !['computers', 'history', 'notifications', 'terminal', 'enrollment'].includes(view.value))
 const scopedPage = computed(() => !['computers', 'history', 'enrollment'].includes(view.value))
 const statusLabel = computed(() => ({ fresh: '数据最新', delayed: '更新延迟', stale: '数据过期', waiting: '等待采样', clockError: '时钟异常' })[dataStatus.value] ?? '未知状态')
 const selected = computed(() => activeMetric.value ? metrics.value.find(metric => metric.key === activeMetric.value!.key && metric.deviceId === activeMetric.value!.deviceId) ?? activeMetric.value : cpu.value)
@@ -126,9 +127,9 @@ async function logout() { await signOut(); if (authenticated.value && error.valu
       <div class="sidebar-bottom"><div class="device-mini"><span class="connection-dot" :class="{ online: connectionStatus === 'online' }"></span><div><strong>{{ device?.name ?? '尚无电脑' }}</strong><small>{{ connectionStatus === 'online' ? '采集端在线' : '采集端离线' }}</small></div></div><button class="logout-button" :disabled="busy" @click="logout">退出登录</button><span class="version">Howie Monitor · v0.1 · <a href="/third-party-notices.txt" target="_blank" rel="noopener">开源许可</a></span></div>
     </aside>
     <main id="main-content" class="workspace" tabindex="-1">
-      <header class="topbar" :class="{ global: !devicePage }"><span>设备监控 <span class="separator">/</span> {{ title }}</span><div v-if="devicePage" class="topbar-right"><ElTag disable-transitions :type="dataStatus === 'fresh' ? 'success' : 'warning'" effect="plain" round>{{ statusLabel }}</ElTag><time>{{ time(latest?.sample?.sampledAt) }}</time></div><span v-else class="muted">{{ view === 'history' ? '历史查询' : view === 'notifications' ? device?.name ?? '选择电脑' : '所有电脑' }}</span></header>
+      <header class="topbar" :class="{ global: !devicePage }"><span>设备监控 <span class="separator">/</span> {{ title }}</span><div v-if="devicePage" class="topbar-right"><ElTag disable-transitions :type="dataStatus === 'fresh' ? 'success' : 'warning'" effect="plain" round>{{ statusLabel }}</ElTag><time>{{ time(latest?.sample?.sampledAt) }}</time></div><span v-else class="muted">{{ view === 'history' ? '历史查询' : view === 'notifications' || view === 'terminal' ? device?.name ?? '选择电脑' : '所有电脑' }}</span></header>
       <div ref="pageRoot" class="page-content">
-        <div class="page-heading" data-enter><div><h1 tabindex="-1">{{ title }}</h1><p class="page-description">{{ view === 'computers' ? '每台电脑独立展示，选择电脑查看详情。' : view === 'notifications' ? '提醒规则按电脑单独配置。' : devicePage ? (device?.name ?? '选择电脑') + ' · ' + (device?.inventory.operatingSystem ?? '') : view === 'history' ? '按电脑、指标和时间查询。' : '在 Windows 电脑上安装采集端。' }}</p></div><div v-if="devicePage && latest?.sample" class="uptime-block"><span>连续运行</span><strong>{{ uptime(latest.sample.uptimeSeconds) }}</strong></div></div>
+        <div class="page-heading" data-enter><div><h1 tabindex="-1">{{ title }}</h1><p class="page-description">{{ view === 'computers' ? '每台电脑独立展示，选择电脑查看详情。' : view === 'notifications' ? '提醒规则按电脑单独配置。' : view === 'terminal' ? '连接所选电脑的管理员 PowerShell。' : devicePage ? (device?.name ?? '选择电脑') + ' · ' + (device?.inventory.operatingSystem ?? '') : view === 'history' ? '按电脑、指标和时间查询。' : '在 Windows 电脑上安装采集端。' }}</p></div><div v-if="devicePage && latest?.sample" class="uptime-block"><span>连续运行</span><strong>{{ uptime(latest.sample.uptimeSeconds) }}</strong></div></div>
         <ComputerSelector v-if="scopedPage" :computers="computers" :selected-id="selectedComputerId" @select="selectComputer" @enroll="view = 'enrollment'"/>
         <ElAlert v-if="connectionError" :title="connectionError" type="error" show-icon :closable="false"/>
         <div v-if="devicePage && dataStatus !== 'fresh' && latest?.sample" class="state-banner" role="status">{{ statusLabel }} · 以下为 {{ time(latest.sample.sampledAt) }} 的采样。<ElButton type="primary" link @click="view = 'enrollment'">检查电脑接入</ElButton></div>
@@ -153,6 +154,7 @@ async function logout() { await signOut(); if (authenticated.value && error.valu
         <section v-else-if="view === 'processes'" class="panel full-process" data-enter><div class="panel-heading"><h2>全部进程</h2><span class="muted">只读查看</span></div><ProcessTable :processes="latest?.sample?.processes ?? []"/></section>
         <HistoryView v-else-if="view === 'history'" :device-id="selectedComputerId || undefined" :label="historyMetricLabel"/>
         <HardwareView v-else-if="view === 'hardware'" :device="device" :metrics="metrics" :data-status="dataStatus" @select="choose" @temperatures="showTemperatures" @enroll="view = 'enrollment'"/>
+        <TerminalView v-else-if="view === 'terminal'" :key="selectedComputerId" :computer-id="selectedComputerId" :computer-name="device?.name ?? computers.find(computer => computer.deviceId === selectedComputerId)?.name ?? ''" @enroll="view = 'enrollment'"/>
         <div v-show="view === 'notifications' || view === 'enrollment'" class="settings-content" data-enter>
           <KeepAlive><NotificationsView v-if="view === 'notifications'" :computer-id="selectedComputerId" :computer-name="device?.name ?? computers.find(computer => computer.deviceId === selectedComputerId)?.name ?? ''" :metrics="metrics" :label="historyMetricLabel"/><EnrollmentView v-else-if="view === 'enrollment'"/></KeepAlive>
         </div>

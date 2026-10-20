@@ -28,6 +28,8 @@ public static class InstallEngine
     {
         if (!SetupPaths.IsAdministrator) throw new InvalidOperationException("安装需要管理员授权。");
         SetupPaths.ValidateConfiguration(plan.Configuration);
+        if (plan.Configuration.Terminal is { Enabled: true } access && access.UserSid != plan.OwnerSid)
+            throw new InvalidOperationException("管理员终端只能授权本次安装的账号。");
         var previous = Existing();
         string dataMarker = Path.Combine(SetupPaths.DataRoot, "product.json");
         SetupPaths.VerifyPath(dataMarker, SetupPaths.DataRoot);
@@ -83,7 +85,7 @@ public static class InstallEngine
             SetupPaths.Write(SetupPaths.MarkerFile, marker);
             var args = new[] { serviceExisted ? "config" : "create", SetupPaths.ServiceName, "binPath=", ServiceCommand(agent), "start=", "auto", "obj=", "LocalSystem", "DisplayName=", "Howie Monitor Agent" };
             await Sc(args, cancellationToken);
-            await Sc(["description", SetupPaths.ServiceName, "Howie Monitor 只读性能采集，通过 HTTPS 上报至私人监控面板。"], cancellationToken);
+            await Sc(["description", SetupPaths.ServiceName, "Howie Monitor 性能采集与经本机授权的远程终端，通过 HTTPS 连接私人面板。"], cancellationToken);
             await Sc(["failure", SetupPaths.ServiceName, "reset=", "86400", "actions=", "restart/5000/restart/15000/restart/60000"], cancellationToken);
             await Sc(["start", SetupPaths.ServiceName], cancellationToken);
             using (var started = new ServiceController(SetupPaths.ServiceName))

@@ -10,7 +10,7 @@ import time
 
 ROOT_FILES = ['.gitignore', 'Directory.Build.props', 'Howie.Monitor.slnx',
               'NuGet.Config', 'global.json', 'LICENSE', 'README.public.md',
-              'PRIVACY.md', 'CODE_SIGNING.md', 'BUILDING.md']
+              'PRIVACY.md', 'CODE_SIGNING.md', 'BUILDING.md', 'docs/terminal-acceptance.md']
 SCRIPTS = ['publish-monitor.ps1', 'start-local.ps1', 'stop-local.ps1',
            'verify-signed-setup.ps1', 'prepare-public-source.py']
 DIRECTORIES = ['src', 'tests', 'deploy', 'licenses', '.github/workflows']

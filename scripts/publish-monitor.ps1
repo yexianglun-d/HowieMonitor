@@ -45,8 +45,8 @@ function Write-PackageNotices([string]$ProjectName, [string]$Destination, [strin
     }
     if ($ProjectName -eq 'Howie.Monitor.Agent') { Copy-Item -LiteralPath (Join-Path $taskRoot 'licenses\MPL-2.0.txt') -Destination $taskLicenses }
     if ($ProjectName -eq 'Howie.Monitor.Server') {
-        $taskWebPackages = @('vue', '@vue/shared', '@vue/reactivity', '@vue/runtime-core', '@vue/runtime-dom')
-        $taskLines.Add(''); $taskLines.Add('The bundled browser application includes Vue MIT-licensed runtime packages:')
+        $taskWebPackages = @('vue', '@vue/shared', '@vue/reactivity', '@vue/runtime-core', '@vue/runtime-dom', '@xterm/xterm', '@xterm/addon-fit')
+        $taskLines.Add(''); $taskLines.Add('The bundled browser application includes Vue and xterm.js MIT-licensed runtime packages:')
         foreach ($taskWebPackage in $taskWebPackages) {
             $taskWebDirectory = Join-Path $taskRoot ('src\Howie.Monitor.Web\node_modules\' + $taskWebPackage)
             $taskWebMetadata = Get-Content -LiteralPath (Join-Path $taskWebDirectory 'package.json') -Raw | ConvertFrom-Json
@@ -85,6 +85,9 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "发布失败：$LASTEXITCODE" }
         Write-PackageNotices $taskTarget.Name $taskDirectory $taskTarget.Runtime
         if ($PublicRelease) {
+            $taskDocs = Join-Path $taskDirectory 'docs'
+            [IO.Directory]::CreateDirectory($taskDocs) | Out-Null
+            Copy-Item -LiteralPath (Join-Path $taskRoot 'docs\terminal-acceptance.md') -Destination $taskDocs
             foreach ($taskDocument in @('PRIVACY.md', 'CODE_SIGNING.md', 'BUILDING.md')) {
                 Copy-Item -LiteralPath (Join-Path $taskRoot $taskDocument) -Destination $taskDirectory
             }

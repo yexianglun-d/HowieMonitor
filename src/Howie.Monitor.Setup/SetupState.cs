@@ -64,5 +64,7 @@ public static class SetupPaths
         if (configuration.ServerUrl != ServerUrl || configuration.LocalDevelopment || string.IsNullOrWhiteSpace(configuration.DeviceId)
             || configuration.DeviceId.Length > 200 || configuration.Token is null || configuration.Token.Length is < 16 or > 512 || configuration.DataDirectory != Path.Combine(DataRoot, "queue"))
             throw new InvalidOperationException("安装配置与正式服务入口或本产品目录不一致。");
+        if (configuration.Terminal is { Enabled: true } access && !TerminalProtocol.ValidUser(access.UserSid))
+            throw new InvalidOperationException("管理员终端授权账号无效。");
     }
 }

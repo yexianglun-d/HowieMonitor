@@ -1,6 +1,6 @@
 # Howie Monitor 隐私说明 / Privacy notice
 
-更新日期：2026 年 10 月 17 日。
+更新日期：2026 年 10 月 20 日。
 
 Howie Monitor 用于经授权监控自己的 Windows 电脑。当前官方安装程序连接 `https://monitor.howied.me/`；该服务由私人面板运营者管理，不是匿名公共服务。使用绑定码前，请确认你认识并信任这个运营者。自行部署时，接收方是你配置的服务器运营者。
 
@@ -11,7 +11,7 @@ Howie Monitor 用于经授权监控自己的 Windows 电脑。当前官方安装
 - 后台采集发送 CPU、GPU、内存、磁盘、网络和可读取传感器的性能数据、采样时间、进程名称、进程编号、可读取的启动时间、CPU 和内存占用，以及采集失败原因、心跳和待上传队列状态。
 - HTTPS 接收服务器及其反向代理会看到连接 IP，访问日志由服务器运营者管理。发送请求使用设备令牌认证；网页通过密码和会话保护访问。
 
-项目代码不采集屏幕画面、键盘输入、浏览记录、文件内容、进程命令行或通信内容。错误诊断文字可能包含系统返回的名称或错误信息。
+后台性能采集不读取屏幕画面、键盘输入、浏览记录、文件内容、进程命令行或通信内容。错误诊断文字可能包含系统返回的名称或错误信息。主动开启远程终端后的数据范围见下文。
 
 ## 何时发送与如何停止
 
@@ -27,8 +27,18 @@ Howie Monitor 用于经授权监控自己的 Windows 电脑。当前官方安装
 
 不包含广告或另外的使用行为统计服务。本项目不向开发者另设的数据收集端发送遥测副本。
 
+## 可选管理员终端
+
+远程终端默认关闭，旧版配置不会自动开启。安装或修复时，用户可以单独勾选授权私人面板使用本次安装账号的管理员 PowerShell。该账号必须已经登录 Windows，并有可用的提升权限令牌；不会保存 Windows 密码，也不会以 SYSTEM 代替用户执行命令。授权账号注销或交互登录断开后不可用。
+
+使用终端前，需要再次输入面板密码。终端输入、输出、执行账号、账号 SID、登录会话标识和窗口尺寸通过 HTTPS/WSS 经同一个面板服务器转发。服务器运营者可以接触这些数据，这不是端到端加密。命令能够读取或修改文件、系统设置以及启动程序；输出可能包含命令访问的文件或其他敏感内容。请只授权可信的私人面板。
+
+项目不将终端命令和输出写入数据库或持久化会话记录；浏览器仅保留当前页面内的有限滚动缓冲。服务端日志记录电脑、会话、账号、创建/结束时间与结束原因等元信息。服务器运营者自行增加的代理日志或其他扩展有自己的保留行为。
+
+切换电脑、离开终端页、主动结束、网页登录失效、网络断开、授权登录状态变化或服务停止会关闭会话并清理其进程组。闲置 5 分钟或连接 1 小时后也会结束。断线后不会排队或重放输入。通过新版安装向导的修复流程取消终端授权可关闭该功能；停止采集服务或卸载也会停止终端。已执行命令造成的系统变更不会因结束会话而撤销。
+
 ## 联系与构建
 
 开源项目问题可通过代码仓库的 Issues 联系维护者；不要公开发送任何监控数据或密钥。私有部署的数据问题请联系你的服务器运营者。源码修改、第三方再发布和自建服务器可能有不同的数据处理行为，请核对相应版本。
 
-English summary: the agent sends authorized computer identity, hardware inventory, performance measurements, process names and resource usage, and health/queue information to the configured HTTPS server. The official installer targets the private service named above and requires its operator's pairing code. Installation validation starts real collection. Stop the Windows service or uninstall to stop transmission. Local queued samples may be uploaded after reconnection. The project does not collect screen contents, keystrokes, browser history, file contents, process command lines or communication payloads. Server operators control access, logs, retention and backups. Optional ServerChan notifications share alert content with that provider. See the Chinese sections above for details.
+English summary: the agent sends authorized computer identity, hardware inventory, performance measurements, process names and resource usage, and health/queue information to the configured HTTPS server. The official installer targets the private service named above and requires its operator's pairing code. Installation validation starts real collection. Stop the Windows service or uninstall to stop transmission. Local queued samples may be uploaded after reconnection. Background monitoring does not collect screen contents, keystrokes, browser history, file contents, process command lines or communication payloads. An optional, locally authorized administrator terminal relays user input and command output through the same server over HTTPS/WSS, under the currently logged-in authorized Windows account, without storing its Windows password. The operator can access this content; it is not end-to-end encrypted. Commands may read or change system data. The project retains terminal lifecycle metadata, not command/output transcripts. Leaving the terminal, logout, disconnect or session expiry ends the process group; disconnected input is not replayed. Server operators control access, logs, retention and backups. Optional ServerChan notifications share alert content with that provider. See the Chinese sections above for details.

@@ -67,3 +67,13 @@
 - 部署结果：`7ab7225` 经无网络隔离 API 演练后部署至 `/opt/howie-monitor/releases/20261020-7ab7225`，切换约 2.1 秒；公网首页/JS/CSS 与发布包逐字节一致，未登录接口仍为 401。原规则、凭据、密钥和 Windows 安装包保留，临时演练容器和数据已清理。真实样本序号 30876、距核对约 2.4 秒，最新样本已写入历史。
 - 验证边界：隔离实例、明确标识的合成样本；不代表真实硬件采样。只改样式，未改指标选择、来源展开、通知或采集行为。新内置标签导航线上后也读取超时，未完成生产截图复核；未启动外部 Chrome。尚未推送 GitHub。
 - 下次继续：先核对 Git 与部署状态；验收需要覆盖行内内容、收起/展开、多行和缺失状态。
+
+## 2026-10-20 / 可选管理员远程终端源码与本地验证
+
+- 做了什么：按用户确认的当前登录管理员账号方案，完成默认关闭的终端授权、Windows 提升令牌与 ConPTY、进程组清理、服务端密码复验与归属校验、限流/有界流控、短期会话与 WebSocket 转发，以及按需加载的 xterm 页面。没有保存 Windows 密码，没有使用 SYSTEM 执行命令。
+- 修改文件：新增 Contracts `Terminal.cs`；Agent `AdminTerminalIdentity.cs`、`WindowsAdminTerminal.cs`、`TerminalWorker.cs`；Server `TerminalBroker.cs`、`TerminalEndpoints.cs`、`TelemetryTerminal.cs`；Web 终端视图/composable/API/类型/测试与菜单路由；Setup 授权选项和校验。补充终端独立测试项目、Nginx WS 模板、README/PRIVACY/BUILDING、实机验收、发布许可/文档和公开源码导出白名单。
+- 发现并修正：真实 WebSocket 集成测试暴露取消读取导致关闭原因丢失，已调整限时关闭顺序；浏览器首次连接暴露刷新后缺少 CSRF，已复用现有刷新方式；切换电脑时 xterm 仍可能保留旧渲染队列，已销毁重建实例并用内置浏览器确认无旧文字。
+- 验证：前端构建与 51 项测试通过；新增 26 项终端测试含真实 Kestrel/Cookie/CSRF/密码/Origin/WebSocket、管理员握手、电脑/登录隔离、过期/断线及输出流控；既有 73 项服务端子集和 20 项 Python 通过。Agent/Server 及 Setup 交叉编译零警告/错误；macOS Setup 使用忽略目录的 Windows 10.0.12 引用与独立临时锁文件，未改仓库原锁文件。
+- 界面验证：仅内置浏览器，1280px 桌面和 390px 手机表单无横向溢出；本地明确标注的协议模拟器验证握手/输入转发和切换清屏，不启动真实进程。截图/日志为 `output/terminal-20261020/`，模拟器已停止；未连接生产终端，未发通知，未改变生产服务器。
+- 没做完/风险：Windows 当前账号提升、真实 PowerShell 交互/Ctrl+C、注销/断网/服务停止后的进程组清理仍需真机验收；完整 Windows 安装包发布和生产部署未做。不能把本地协议模拟当成真实管理员终端可用。
+- 下次继续：按 `docs/terminal-acceptance.md` 在授权 Windows 11 电脑执行真实验收，记录安装包哈希与结果；通过后再发布安装包、更新服务器及代理配置，默认权限仍保持关闭。
