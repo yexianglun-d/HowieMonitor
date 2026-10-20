@@ -2,10 +2,13 @@
 
 ## 下次继续
 
-- 最新本地补丁还包括 `SetupForm.cs` 卸载专用四步菜单、统一步骤刷新、卸载窗口标题和取消授权/失败返回文案；删除引擎未改。`SetupFlowTests.cs` 新增 7 个用例，覆盖异步卸载、保留/删除选项、失败/UAC 取消、完成关闭及窄窗口布局。锁定还原与测试项目编译通过；原生窗口测试尚未在 Windows 运行，不能称为 Windows 验收完成。
-- 本机 SDK 10.0.101 的跨平台还原报 System.CodeDom/EventLog；使用经微软 SHA-512 校验的 SDK 10.0.113，并把官方 WindowsDesktop 引用包映射到该隔离 SDK 的 packs 目录后，还原和编译通过，未改依赖/锁文件。工具及编译日志在 `.local/uninstall-wizard-20261020/`；下一步发布应运行现有 Windows workflow（request_signing=false），核对新安装包来源与哈希后再替换下载。当前没有提交/推送/部署此补丁，也没有产出可分发的新安装包。
-- `EnrollmentView.vue` 卸载引导已验证、尚未部署。入口在“电脑接入”页内导航“卸载采集端”；搜索关键词写 Howie，备用运行命令为 `"%ProgramFiles%\HowieMonitor\HowieMonitorSetup.exe" --uninstall`。默认保留配置/缓存，云端历史保留。59 项前端测试、构建及内置浏览器桌面/390px 检查通过。
-- 用户已确认应用列表中能找到且能够卸载。不能误判成缺卸载注册，不要重写注册表；不要替用户运行真实卸载。线上仍为应用 `0959d4a`、Windows 安装包 `05e985a`，服务器网页更新不会改变电脑上旧 EXE 的左侧菜单。
+- 最新应用与 Windows 安装包 `f553cf9` 已于 2026-10-21 00:17（北京时间）部署并推送。当前 `/opt/howie-monitor/current` 为 `/opt/howie-monitor/releases/20261021-f553cf9`，上一版 `20261020-0959d4a`；旧安装包在服务器 `staging/deploy-uninstall-20261021/pre-switch/HowieMonitorSetup.exe`。原容器/用户/镜像/数据目录和 Nginx 未改。当前 2 台电脑及凭据/通知/密钥保留；不要按旧记录恢复成 4 台电脑。
+- Windows Actions `39454440301` 通过 209 项 .NET、20 项 Python、59 项前端及实际安装包运行时/嵌入载荷检查，新增 7 个卸载流程/布局用例已在 Windows 运行。产物 ID `12280236526`，ZIP SHA-256 `53f538cb4580c0d32578af88f87778acd090da5142af42cb2f5e80012d39daa4`；受保护下载的新 EXE SHA-256 `60464df0b5c8971045be5c8aa098e500eeaf2caf159188609c59319219b4cce4`，93,932,360 字节，仍未签名。记录在 `.local/deploy-uninstall-20261021/`。
+- 新版向导四步与网页卸载引导均已发布；用户需刷新网页、重新下载安装程序并运行安装/修复，才能更新电脑上旧 EXE 的菜单。备用命令仍为 `"%ProgramFiles%\HowieMonitor\HowieMonitorSetup.exe" --uninstall`。用户已确认旧版能够卸载，不要误判成缺注册、改写注册表或替用户执行卸载。
+- 备份 `/opt/howie-monitor/backups/monitor-20261020-161146.tar.gz` 已恢复校验，SHA-256 `4ee0f2e49bf76f9441985d7f4633aff5f6aff672edb23430b98b62b93d4274df`，备份停服 20.93 秒、切换 5.3 秒。隔离容器和私有临时副本均已清理，生产备份/配置只保留在服务器。
+- 部署前后两台电脑均离线，GAMES 最后采样 2026-10-20 23:41（北京时间），本轮未执行真实 Windows 命令或自动开启终端授权。下一步让目标电脑在线，运行新版安装/修复并显式勾选当前登录管理员账号授权，再按 `docs/terminal-acceptance.md` 验证真实身份与 ConPTY；不能把 Windows 单元测试/协议模拟器成功写成实机终端验收完成。
+- 公网 5 个资源哈希、4 项未登录鉴权和安装包摘要一致；本轮旧线上标签 DOM 可读，但刷新/截图超时，未做新版本线上截图，不要拿旧标签缓存当新前端。仅使用内置浏览器，没有启动外部 Chrome。
+- 本机后续跨平台编译可复用经微软 SHA-512 校验的 `.local/tooling/dotnet-10.0.113`；该隔离 SDK 的 packs 下映射官方 WindowsDesktop 引用包后锁定还原通过，未改依赖/锁文件。此前构建日志在 `.local/uninstall-wizard-20261020/`。
 
 - 滚动交互应用 `0959d4a` 已于 2026-10-20 19:12（北京时间）部署并推送。`useScrollExperience.ts` 将 GSAP ScrollTrigger、吸顶段落导航、阅读进度和装饰视差统一清理；不要让实时采样行的 DOM 更新反复调用 refresh（会打断原生 smooth scroll）。只有段落身份或布局尺寸变化才重建/刷新，刷新使用 safe 模式；当前位置按当前段落实际边界计算。
 - `useHorizontalRail.ts` 复用到电脑卡片与电脑切换栏；原生横向滚动/CSS 吸附，不拦截纵向滚轮。电脑总览默认横向，可切回网格；方向键仅在轨道自身获焦时接管。减少动态效果关闭视差/吸附，按钮/锚点直接定位。保留电脑 ID、指标身份、表单草稿与终端销毁边界。

@@ -146,3 +146,13 @@
 - 修改文件：`src/Howie.Monitor.Setup/SetupForm.cs`、`tests/Howie.Monitor.Server.Tests/SetupFlowTests.cs`、公开源码清单及本目录状态/交接记录。卸载模式使用独立四步，通过 `ShowStep` 刷新菜单和内容；失败回到确认页并保留本地数据选择，完成后正常关闭。没有修改 InstallEngine、注册表或实际删除范围。
 - 验证方式与结果：SDK 10.0.113 下锁定依赖还原、安装器及 Server.Tests 编译通过，0 警告/错误。原 macOS SDK 未识别 WindowsDesktop 引用包，依赖裁剪与 Windows 不一致；对经微软发布摘要校验的隔离 SDK 补齐官方引用包映射后通过，未改项目依赖或锁文件。新增 7 个用例已编译，Windows 运行/截图尚未执行。编译记录位于 `.local/uninstall-wizard-20261020/verified-build.log`；网页卸载引导的桌面截图已补存至 `output/uninstall-guide-20261020/desktop.png`。
 - 剩余：当前仅本地源码修复，尚未提交、推送或发布新版安装包。线上下载仍为 `05e985a`，用户原有 EXE 不会随网页刷新更新。下一步使用 Windows 发布流程完成原生测试及打包后再上线；本轮未执行真实卸载或数据删除。
+
+## 2026-10-21 / 发布卸载引导与新版 Windows 安装包
+
+- 做了什么：按用户部署要求，将应用 `f553cf92fae18e71b840731f0e99a5abec0cd75b` 提交并推送，触发现有 Windows workflow（request_signing=false），从确切构建产物获取新 EXE；完成 Linux 发布、服务器隔离演练、一致性备份/恢复校验后，于北京时间 00:17 切换应用及受保护安装包下载。
+- 修改文件：提交此前 `SetupForm.cs`、`SetupFlowTests.cs`、`EnrollmentView.vue`、公开源码清单及项目日志；本次发布没有再改业务源码。沿用并适配已有发布脚本，脚本与非敏感结果在忽略目录 `.local/deploy-uninstall-20261021/`，生产配置/凭据/备份只留服务器。
+- 验证方式与结果：Windows Actions `39454440301` 完整编译、209 项 .NET（34 Collector / 148 Server / 27 Terminal，含新增 7 个卸载流程/布局用例）、20 项 Python、59 项前端、真实安装包 `--check-package` 检查通过。本地前端构建/59 项测试通过，170 个公开源码清单一致；434 个 Linux 发布文件一致，无外网副本接口/密码/CSRF/终端协议、双电脑删除隔离及两次重启演练通过。
+- 产物：GitHub artifact `12280236526`，ZIP SHA-256 `53f538cb4580c0d32578af88f87778acd090da5142af42cb2f5e80012d39daa4` 与下载一致；新版 EXE SHA-256 `60464df0b5c8971045be5c8aa098e500eeaf2caf159188609c59319219b4cce4`，93,932,360 字节，仍未签名。Linux 归档 SHA-256 `d6ef60d2df33e2f77d5d5c0bf0521c54568f4bc4fb847b2b8deba5803933ab76`。
+- 部署结果：当前应用 `/opt/howie-monitor/releases/20261021-f553cf9`，旧应用 `20261020-0959d4a` 保留；旧安装包保留在服务器本次 staging 的 `pre-switch/HowieMonitorSetup.exe`。新备份 `/opt/howie-monitor/backups/monitor-20261020-161146.tar.gz` 完整恢复校验通过，SHA-256 `4ee0f2e49bf76f9441985d7f4633aff5f6aff672edb23430b98b62b93d4274df`；备份停服 20.93 秒，正式切换 5.3 秒。没有给备份恢复校验套过短的外层限时。
+- 线上验收：5 个公网 HTML/JS/CSS 资源哈希一致，4 项未登录受保护接口检查通过，安装包来源/字节数/摘要一致。现有 2 台电脑注册信息/凭据、通知设置/规则、密码和加密密钥保留，Nginx 未改；待移除队列为 0。两台电脑部署前后均离线，保留的最新样本和 52,753 条原始历史记录仍在；没有以离线样本声称实时采集正常。隔离容器、快照/恢复副本和安装包临时文件均已清理。
+- 剩余与下次继续：用户需刷新面板，并在目标 Windows 电脑下载运行新版安装/修复才会更新旧 EXE 的菜单；终端仍需本机勾选授权、账号保持登录及电脑在线，再进行真实管理员身份/ConPTY/退出清理验收。本轮未自动安装/卸载目标电脑、未开启权限、未执行生产终端命令或主动通知。内置浏览器旧线上标签 DOM 可读，刷新/截图仍超时，未完成新版本线上截图；没有启动外部 Chrome。
