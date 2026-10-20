@@ -6,6 +6,7 @@ import { ElAlert, ElButton, ElCollapse, ElCollapseItem, ElConfigProvider, ElInpu
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import { capacity, number, rate, time, uptime, statusText } from './utils/format'
 import { locationHash, readLocation, replaceQuery } from './utils/location'
+import { temperatureLabel } from './utils/temperatures'
 import MetricCard from './views/monitor/components/MetricCard.vue'
 import ProcessTable from './views/monitor/components/ProcessTable.vue'
 import TrendChart from './components/base/TrendChart.vue'
@@ -15,6 +16,7 @@ import NotificationsView from './views/monitor/NotificationsView.vue'
 import EnrollmentView from './views/monitor/EnrollmentView.vue'
 import HardwareView from './views/monitor/HardwareView.vue'
 import ComputerSelector from './views/monitor/components/ComputerSelector.vue'
+import TemperaturePanel from './views/monitor/components/TemperaturePanel.vue'
 import type { Metric, HistoryMetric } from './types/monitor'
 
 const initial = readLocation(window.location.hash)
@@ -32,7 +34,7 @@ const overviewItems = computed(() => [{ label: 'CPU', metric: cpu.value, color: 
 const overviewSelected = computed(() => overviewItems.value.find(item => item.label === overviewTab.value) ?? overviewItems.value[0]!)
 const chartPoints = computed(() => points(selected.value))
 const groupId = (metric: Metric) => metric.deviceId.startsWith('cpu/logical/') ? 'cpu/logical' : metric.deviceId
-const filteredMetrics = computed(() => metrics.value.filter(metric => (metricName(metric) + ' ' + groupName(groupId(metric))).toLowerCase().includes(metricQuery.value.toLowerCase())))
+const filteredMetrics = computed(() => metrics.value.filter(metric => (metricName(metric) + ' ' + metric.name + ' ' + groupName(groupId(metric)) + (metric.unit === '°C' ? ' 温度 temperature °c' : '')).toLowerCase().includes(metricQuery.value.trim().toLowerCase())))
 const detailGroups = computed(() => [...new Set(filteredMetrics.value.map(groupId))])
 function syncLocation() {
   const location = readLocation(window.location.hash)
@@ -54,6 +56,7 @@ watch(selectedComputerId, id => { if (id) replaceQuery({ computer: id }); overvi
 watch(authenticated, () => toast.clear())
 function points(metric: Metric | null) { return metric ? history.value[metric.deviceId + ':' + metric.key] ?? [] : [] }
 function choose(metric: Metric | null) { if (!metric) return; activeMetric.value = metric; view.value = 'detail'; void locateChart() }
+function showTemperatures() { metricQuery.value = '温度'; view.value = 'detail' }
 async function locateChart() {
   await nextTick()
   detailChart.value?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })
@@ -74,7 +77,7 @@ function groupName(group: string) {
   if (group.startsWith('sensor/Storage') || group === 'disk') return '磁盘'
   return '分区 ' + group
 }
-function metricName(metric: Metric) { return metric.deviceId.startsWith('cpu/logical/') ? '逻辑处理器 ' + metric.deviceId.split('/').at(-1) : metric.name }
+function metricName(metric: Metric) { return metric.unit === '°C' ? temperatureLabel(metric) : metric.deviceId.startsWith('cpu/logical/') ? '逻辑处理器 ' + metric.deviceId.split('/').at(-1) : metric.name }
 function historyMetricLabel(metric: HistoryMetric) { return groupName(metric.deviceId.startsWith('cpu/logical/') ? 'cpu/logical' : metric.deviceId) + ' · ' + (metric.deviceId.startsWith('cpu/logical/') ? '逻辑处理器 ' + metric.deviceId.split('/').at(-1) : metric.name) }
 async function submit() { await signIn(password.value); if (authenticated.value) password.value = ''; else if (error.value) toast.error(error.value) }
 async function logout() { await signOut(); if (authenticated.value && error.value) toast.error(error.value) }
@@ -119,6 +122,7 @@ async function logout() { await signOut(); if (authenticated.value && error.valu
         <section v-else-if="devicePage && !latest?.sample && view !== 'hardware'" class="panel welcome-state" data-enter><span class="empty-mark" aria-hidden="true">H</span><h2>{{ computers.length ? '等待这台电脑上报' : '添加你的第一台电脑' }}</h2><p>{{ computers.length ? '请确认采集端服务正在运行，收到数据后会自动更新。' : '安装 Windows 采集端后，即可查看运行状态。' }}</p><ElButton type="primary" @click="view = 'enrollment'">{{ computers.length ? '查看接入步骤' : '添加电脑' }}</ElButton><ElButton type="primary" link v-if="computers.length" @click="view = 'history'">查看已有历史</ElButton></section>
         <template v-else-if="view === 'overview'">
           <div class="metric-grid" data-enter><MetricCard title="CPU" code="01" subtitle="整机占用" :metric="cpu" :points="points(cpu)" color="#e8c58c" @select="choose(cpu)"/><MetricCard title="GPU" code="02" :subtitle="gpu?.name === 'D3D 3D' ? '3D 引擎占用' : '核心占用'" :metric="gpu" :points="points(gpu)" color="#aeb7f1" @select="choose(gpu)"/><MetricCard title="内存" code="03" :subtitle="capacity(find('memory.used')?.value) + ' / ' + capacity(find('memory.total')?.value)" :metric="memory" :points="points(memory)" color="#9adbc9" @select="choose(memory)"/><MetricCard title="磁盘" code="04" subtitle="首个物理盘活动时间" :metric="disk" :points="points(disk)" color="#9fbacf" @select="choose(disk)"/></div>
+          <TemperaturePanel :metrics="metrics" :data-status="dataStatus" @select="choose" @details="showTemperatures"/>
           <section class="panel main-chart" data-enter><div class="panel-heading"><div><h2>性能变化</h2><p>最近 10 分钟 · 每 2 秒采样</p></div><div class="chart-tabs" aria-label="总览图表指标"><button v-for="item in overviewItems" :key="item.label" :class="{ active: overviewTab === item.label }" :aria-pressed="overviewTab === item.label" :disabled="!item.metric" @click="overviewTab = item.label">{{ item.label }}</button></div></div><TrendChart :key="overviewTab" :points="points(overviewSelected.metric)" :color="overviewSelected.color"/></section>
           <div class="lower-grid" data-enter><section class="panel"><div class="panel-heading"><div><h2>主要占用进程</h2><p>{{ latest?.sample?.processes.length ?? 0 }} 个进程</p></div><ElButton type="primary" link @click="view = 'processes'">查看全部</ElButton></div><ProcessTable :processes="latest?.sample?.processes ?? []" compact/></section><section class="panel network-panel"><div class="panel-heading"><h2>网络活动</h2><span class="muted">{{ dataStatus === 'fresh' ? '当前采样' : '最后采样' }}</span></div><div v-for="network in device?.inventory.networks ?? []" :key="network.id" class="network-row"><span>{{ network.name }}</span><div><span>↓ {{ networkValue(network.id, 'network.download') }}</span><span>↑ {{ networkValue(network.id, 'network.upload') }}</span></div></div><p v-if="!device?.inventory.networks.length" class="empty-state">尚无网卡信息</p></section></div>
         </template>
@@ -130,7 +134,7 @@ async function logout() { await signOut(); if (authenticated.value && error.valu
         </template>
         <section v-else-if="view === 'processes'" class="panel full-process" data-enter><div class="panel-heading"><h2>全部进程</h2><span class="muted">只读查看</span></div><ProcessTable :processes="latest?.sample?.processes ?? []"/></section>
         <HistoryView v-else-if="view === 'history'" :device-id="selectedComputerId || undefined" :label="historyMetricLabel"/>
-        <HardwareView v-else-if="view === 'hardware'" :device="device" :metrics="metrics" @enroll="view = 'enrollment'"/>
+        <HardwareView v-else-if="view === 'hardware'" :device="device" :metrics="metrics" :data-status="dataStatus" @select="choose" @temperatures="showTemperatures" @enroll="view = 'enrollment'"/>
         <div v-show="view === 'notifications' || view === 'enrollment'" data-enter>
           <KeepAlive><NotificationsView v-if="view === 'notifications'" :metrics="metrics" :label="historyMetricLabel"/><EnrollmentView v-else-if="view === 'enrollment'"/></KeepAlive>
         </div>

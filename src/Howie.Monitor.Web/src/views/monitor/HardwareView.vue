@@ -2,11 +2,14 @@
 import { ElButton, ElCard, ElCollapse, ElCollapseItem, ElDescriptions, ElDescriptionsItem, ElEmpty, ElTag } from 'element-plus'
 import { capacity } from '../../utils/format'
 import type { Device, Metric } from '../../types/monitor'
-defineProps<{ device: Device | null; metrics: Metric[] }>()
-defineEmits<{ enroll: [] }>()
+import TemperaturePanel from './components/TemperaturePanel.vue'
+defineProps<{ device: Device | null; metrics: Metric[]; dataStatus: string }>()
+defineEmits<{ enroll: []; select: [metric: Metric]; temperatures: [] }>()
 </script>
 <template>
-  <div v-if="device" class="hardware-grid">
+  <template v-if="device">
+  <TemperaturePanel :metrics="metrics" :data-status="dataStatus" @select="$emit('select', $event)" @details="$emit('temperatures')"/>
+  <div class="hardware-grid">
     <ElCard class="hardware-panel" shadow="never">
       <template #header><h2>处理器与内存</h2></template>
       <ElDescriptions :column="1" border>
@@ -36,5 +39,6 @@ defineEmits<{ enroll: [] }>()
       </ElDescriptions>
     </ElCard>
   </div>
+  </template>
   <ElCard v-else class="welcome-state" shadow="never"><ElEmpty description="接入电脑后显示处理器、显卡和存储信息。"><ElButton type="primary" @click="$emit('enroll')">查看接入步骤</ElButton></ElEmpty></ElCard>
 </template>
