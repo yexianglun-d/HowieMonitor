@@ -6,6 +6,8 @@ The current source supports monitoring multiple computers under one private dash
 
 The Windows installer guides an authorized user through environment checks, a short-lived pairing code, explicit installation confirmation, Windows administrator consent, and verification of real telemetry. Temperature and power readings depend on hardware and permissions; unavailable readings stay marked as unavailable. The installer does not install sensor drivers.
 
+GPU usage is shown separately for each reported graphics adapter, with its model name and independent history curve. An idle integrated GPU does not hide a discrete GPU's load; missing readings remain unavailable.
+
 This is an early personal project. Real service installation, repair, uninstall, reboot recovery, notification delivery and long-running stability are still undergoing acceptance testing. Do not treat a successful build as proof of those scenarios.
 
 ## Downloads and setup

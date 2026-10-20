@@ -23,8 +23,10 @@ async function harness(overrides = {}, initialComputerId = '') {
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const utility = { exports: {} }
   vm.runInNewContext(ts.transpileModule(await readFile(new URL('../src/utils/computers.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { ...utility, Date, Math })
+  const gpus = { exports: {} }
+  vm.runInNewContext(ts.transpileModule(await readFile(new URL('../src/utils/gpus.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, gpus)
   const sandbox = { exports: {}, require: name => name === 'vue' ? { ...vue, onMounted: callback => { mounted = callback }, onUnmounted: callback => { unmounted = callback } }
-    : name === '../api/monitor' ? api : name === '../utils/computers' ? utility.exports : { ApiError: class ApiError extends Error {} },
+    : name === '../api/monitor' ? api : name === '../utils/computers' ? utility.exports : name === '../utils/gpus' ? gpus.exports : { ApiError: class ApiError extends Error {} },
     AbortController, DOMException, Date, setTimeout: () => 1, clearTimeout() {}, setInterval: () => 1, clearInterval() {},
     document: { hidden: false, addEventListener() {}, removeEventListener() {} } }
   vm.runInNewContext(code, sandbox)
@@ -121,4 +123,26 @@ test('the real computer selector renders distinct accessible choices and indepen
     assert.equal((html.match(/aria-pressed="true"/g) ?? []).length, 1)
     assert.match(html, /在线/); assert.match(html, /离线/); assert.match(html, /first/); assert.match(html, /second/)
   } finally { await server.close() }
+})
+
+test('every GPU requests its own curve with the selected computer and original metric identity', async () => {
+  const requests = []
+  const h = await harness({ getLatest: async id => ({ ...latest(id), sample: { ...latest(id).sample, metrics: [
+    { key: 'same-core-key', deviceId: 'sensor/GpuAmd/1', name: 'GPU Core', unit: '%', status: 'available', value: id === 'first' ? 0 : 12, source: 'LibreHardwareMonitorLib 0.9.6: AMD/Load' },
+    { key: 'same-core-key', deviceId: 'sensor/GpuNvidia/2', name: 'GPU Core', unit: '%', status: 'available', value: id === 'first' ? 5 : 80, source: 'LibreHardwareMonitorLib 0.9.6: NVIDIA/Load' },
+  ] } }), getHistory: async (computer, key, device, unit) => {
+    requests.push([computer, key, device, unit])
+    return [{ value: computer === 'first' ? device.includes('Amd') ? 0 : 5 : device.includes('Amd') ? 12 : 80 }]
+  } })
+  try {
+    await h.start()
+    assert.equal(h.monitor.connectionError.value, '')
+    assert.deepEqual(requests, [['first', 'same-core-key', 'sensor/GpuAmd/1', '%'], ['first', 'same-core-key', 'sensor/GpuNvidia/2', '%']])
+    assert.equal(h.monitor.history.value['sensor/GpuAmd/1:same-core-key'][0].value, 0)
+    assert.equal(h.monitor.history.value['sensor/GpuNvidia/2:same-core-key'][0].value, 5)
+    h.monitor.selectComputer('second'); await tick()
+    assert.equal(h.monitor.history.value['sensor/GpuAmd/1:same-core-key'][0].value, 12)
+    assert.equal(h.monitor.history.value['sensor/GpuNvidia/2:same-core-key'][0].value, 80)
+    assert.equal(h.monitor.gpus.value.length, 2)
+  } finally { h.close() }
 })

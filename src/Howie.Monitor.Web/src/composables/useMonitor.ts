@@ -2,6 +2,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import * as api from '../api/monitor'
 import { ApiError } from '../api/request'
 import { ageComputerSnapshot } from '../utils/computers'
+import { gpuSummaries } from '../utils/gpus'
 import type { ComputerSummary, Device, Latest, Metric, HistoryPoint } from '../types/monitor'
 
 export function useMonitor(initialComputerId = '') {
@@ -28,8 +29,8 @@ export function useMonitor(initialComputerId = '') {
   const cpu = computed(() => find('cpu.usage'))
   const memory = computed(() => find('memory.usage'))
   const disk = computed(() => find('disk.activity'))
-  const gpu = computed(() => metrics.value.find(metric => metric.deviceId.startsWith('sensor/Gpu') && metric.unit === '%' && ['D3D 3D', 'GPU Core'].includes(metric.name)) ?? null)
-  const highlights = computed(() => [cpu.value, gpu.value, memory.value, disk.value])
+  const gpus = computed(() => gpuSummaries(metrics.value))
+  const highlights = computed(() => [cpu.value, ...gpus.value.map(gpu => gpu.usage), memory.value, disk.value])
 
   function stop() { generation++; clearTimeout(timer); controller?.abort(); controller = null }
   function clearComputer() { device.value = null; latest.value = null; history.value = {}; activeMetric.value = null }
@@ -58,7 +59,8 @@ export function useMonitor(initialComputerId = '') {
       if (newDevice?.deviceId !== computerId || (newLatest.sample && newLatest.sample.deviceId !== computerId))
         throw new Error('监控数据的电脑归属不一致，请重新读取。')
       device.value = newDevice; latest.value = newLatest; serverFetchedAt = Date.now(); connectionError.value = ''
-      const tracked = [...highlights.value, activeMetric.value].filter((metric): metric is Metric => metric !== null)
+      const tracked = [...new Map([...highlights.value, activeMetric.value].filter((metric): metric is Metric => metric !== null)
+        .map(metric => [`${metric.deviceId}:${metric.key}`, metric])).values()]
       const histories = await Promise.all(tracked.map(async metric => [
         `${metric.deviceId}:${metric.key}`, await api.getHistory(computerId, metric.key, metric.deviceId, metric.unit, requestController.signal),
       ] as const))
@@ -97,5 +99,5 @@ export function useMonitor(initialComputerId = '') {
     finally { initializing.value = false }
   })
   onUnmounted(() => { stop(); clearInterval(clock); document.removeEventListener('visibilitychange', visibility) })
-  return { computers, selectedComputerId, selectComputer, authenticated, setupRequired, initializing, computerLoading, busy, error, connectionError, device, latest, metrics, history, activeMetric, dataStatus, connectionStatus, cpu, gpu, memory, disk, signIn, signOut, find }
+  return { computers, selectedComputerId, selectComputer, authenticated, setupRequired, initializing, computerLoading, busy, error, connectionError, device, latest, metrics, history, activeMetric, dataStatus, connectionStatus, cpu, gpus, memory, disk, signIn, signOut, find }
 }

@@ -2,6 +2,8 @@
 
 ## 下次继续
 
+- 本轮 GPU 修复已完成本地验证，尚待部署：旧版把第一条 AMD 核显 0% 显示为电脑的 GPU 占用，忽略已上报的 RTX 5070 Ti 5%。用户明确选择逐显卡名称、占用与曲线；不要改成只显示独显、最高值或多显卡相加。
+- `ComputerSummary.gpus` 是逐显卡列表，旧 `gpuPercent` 仅在单显卡时保留；前后端按硬件 ID 分组，组内优先可用 `GPU Core`，不可用时使用 `D3D 3D` 并明确标为 3D 引擎占用。保留原始指标 key，显存/总线/功耗百分比不能作为核心占用。
 - 先运行 `git status --short --branch` 与 `git log -5 --oneline`。应用代码 `42b30e6` 已于 2026-10-20 部署至 `https://monitor.howied.me/`，包含此前 Toast、温度展示、多电脑总览与独立通知规则；本地提交尚未推送 GitHub。
 - 总览默认路由 `#computers`，各卡片直接进入对应电脑的总览/通知。`/api/notifications/computer?computerId=...` 必须明确电脑归属；全局 `/api/notifications` 只管理共用发送渠道与无归属旧记录。
 - `NotificationStore` 一次性把旧规则复制给当时已接入的电脑；迁移标记持久化，新增电脑默认空规则。不能重跑迁移、把旧任务强行猜测归属，或让保存 A 清空 B 的观察状态。
@@ -34,8 +36,8 @@
 
 ## 验证入口
 
-- 前端目录：`npm run build`、`npm test`（当前 35 项）。
-- 当前 macOS 可通过忽略目录 `.local/multi-computer-tests/Howie.Monitor.Core.Tests.csproj` 运行不依赖 Windows 的服务端子集（70 项）；Windows 仍应运行仓库原测试项目。
+- 前端目录：`npm run build`、`npm test`（当前 41 项）。
+- 当前 macOS 可通过忽略目录 `.local/multi-computer-tests/Howie.Monitor.Core.Tests.csproj` 运行不依赖 Windows 的服务端子集（73 项）；Windows 仍应运行仓库原测试项目。
 - 根目录：`python3 -m unittest discover -s tests -p 'test_*.py'`。
 - Windows 构建、测试和发布遵循 `BUILDING.md` 与 `global.json`。
 - 本次真实数据浏览器证据位于忽略目录 `output/playwright/temperatures/`；前次同步证据在 `output/playwright/sync-20261020/`。

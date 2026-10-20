@@ -7,6 +7,7 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import { capacity, number, rate, time, uptime, statusText } from './utils/format'
 import { locationHash, readLocation, replaceQuery } from './utils/location'
 import { temperatureLabel } from './utils/temperatures'
+import { gpuUsageLabel } from './utils/gpus'
 import MetricCard from './views/monitor/components/MetricCard.vue'
 import ProcessTable from './views/monitor/components/ProcessTable.vue'
 import TrendChart from './components/base/TrendChart.vue'
@@ -21,7 +22,7 @@ import ComputersView from './views/monitor/ComputersView.vue'
 import type { Metric, HistoryMetric } from './types/monitor'
 
 const initial = readLocation(window.location.hash)
-const { computers, selectedComputerId, selectComputer, authenticated, setupRequired, initializing, computerLoading, busy, error, connectionError, device, latest, metrics, history, activeMetric, dataStatus, connectionStatus, cpu, gpu, memory, disk, signIn, signOut, find } = useMonitor(initial.query.get('computer') ?? '')
+const { computers, selectedComputerId, selectComputer, authenticated, setupRequired, initializing, computerLoading, busy, error, connectionError, device, latest, metrics, history, activeMetric, dataStatus, connectionStatus, cpu, gpus, memory, disk, signIn, signOut, find } = useMonitor(initial.query.get('computer') ?? '')
 const toast = useToast()
 const password = ref(''), view = ref(initial.page), pageRoot = ref<HTMLElement | null>(null)
 const overviewTab = ref('CPU'), metricQuery = ref(''), detailChart = ref<HTMLElement | null>(null)
@@ -31,9 +32,16 @@ const devicePage = computed(() => !['computers', 'history', 'notifications', 'en
 const scopedPage = computed(() => !['computers', 'history', 'enrollment'].includes(view.value))
 const statusLabel = computed(() => ({ fresh: '数据最新', delayed: '更新延迟', stale: '数据过期', waiting: '等待采样', clockError: '时钟异常' })[dataStatus.value] ?? '未知状态')
 const selected = computed(() => activeMetric.value ? metrics.value.find(metric => metric.key === activeMetric.value!.key && metric.deviceId === activeMetric.value!.deviceId) ?? activeMetric.value : cpu.value)
-// 总览仅使用四个百分比指标，详情选择不能改变总览的单位与坐标。
-const overviewItems = computed(() => [{ label: 'CPU', metric: cpu.value, color: '#e8c58c' }, { label: 'GPU', metric: gpu.value, color: '#aeb7f1' }, { label: '内存', metric: memory.value, color: '#9adbc9' }, { label: '磁盘', metric: disk.value, color: '#9fbacf' }])
-const overviewSelected = computed(() => overviewItems.value.find(item => item.label === overviewTab.value) ?? overviewItems.value[0]!)
+// 每张显卡绑定自己的原始指标，详情选择不能改变总览的单位或串用另一张显卡的曲线。
+const overviewItems = computed(() => [
+  { id: 'CPU', label: 'CPU', metric: cpu.value, color: '#e8c58c', subtitle: '整机占用', hardware: '', code: '01' },
+  ...(gpus.value.length ? gpus.value.map((gpu, index) => ({ id: gpu.deviceId, label: gpus.value.length > 1 ? 'GPU ' + (index + 1) : 'GPU',
+    metric: gpu.usage, color: '#aeb7f1', subtitle: gpuUsageLabel(gpu.usage), hardware: gpu.name, code: '02.' + (index + 1) }))
+    : [{ id: 'GPU', label: 'GPU', metric: null, color: '#aeb7f1', subtitle: '尚无占用上报', hardware: '', code: '02' }]),
+  { id: '内存', label: '内存', metric: memory.value, color: '#9adbc9', subtitle: capacity(find('memory.used')?.value) + ' / ' + capacity(find('memory.total')?.value), hardware: '', code: '03' },
+  { id: '磁盘', label: '磁盘', metric: disk.value, color: '#9fbacf', subtitle: '首个物理盘活动时间', hardware: '', code: '04' },
+])
+const overviewSelected = computed(() => overviewItems.value.find(item => item.id === overviewTab.value) ?? overviewItems.value[0]!)
 const chartPoints = computed(() => points(selected.value))
 const groupId = (metric: Metric) => metric.deviceId.startsWith('cpu/logical/') ? 'cpu/logical' : metric.deviceId
 const filteredMetrics = computed(() => metrics.value.filter(metric => (metricName(metric) + ' ' + metric.name + ' ' + groupName(groupId(metric)) + (metric.unit === '°C' ? ' 温度 temperature °c' : '')).toLowerCase().includes(metricQuery.value.trim().toLowerCase())))
@@ -72,7 +80,7 @@ function groupName(group: string, useCurrentInventory = true) {
   if (group === 'cpu/total') return 'CPU'
   if (group === 'memory') return '内存'
   if (group.startsWith('sensor/Cpu')) return 'CPU 传感器'
-  if (group.startsWith('sensor/Gpu') || group === 'gpu') return 'GPU'
+  if (group.startsWith('sensor/Gpu') || group === 'gpu') return useCurrentInventory ? gpus.value.find(gpu => gpu.deviceId === group)?.name ?? 'GPU' : 'GPU'
   const network = useCurrentInventory ? device.value?.inventory.networks.find(item => item.id === group) : null
   if (network) return '网络 · ' + network.name
   const physical = useCurrentInventory ? device.value?.inventory.physicalDisks.find(item => item.id === group) : null
@@ -128,9 +136,9 @@ async function logout() { await signOut(); if (authenticated.value && error.valu
         <section v-else-if="devicePage && computerLoading" class="panel computer-loading" aria-busy="true" aria-label="正在读取电脑信息"><ElSkeleton :rows="6"/></section>
         <section v-else-if="devicePage && !latest?.sample && view !== 'hardware'" class="panel welcome-state" data-enter><span class="empty-mark" aria-hidden="true">H</span><h2>{{ computers.length ? '等待这台电脑上报' : '添加你的第一台电脑' }}</h2><p>{{ computers.length ? '请确认采集端服务正在运行，收到数据后会自动更新。' : '安装 Windows 采集端后，即可查看运行状态。' }}</p><ElButton type="primary" @click="view = 'enrollment'">{{ computers.length ? '查看接入步骤' : '添加电脑' }}</ElButton><ElButton type="primary" link v-if="computers.length" @click="view = 'history'">查看已有历史</ElButton></section>
         <template v-else-if="view === 'overview'">
-          <div class="metric-grid" data-enter><MetricCard title="CPU" code="01" subtitle="整机占用" :metric="cpu" :points="points(cpu)" color="#e8c58c" @select="choose(cpu)"/><MetricCard title="GPU" code="02" :subtitle="gpu?.name === 'D3D 3D' ? '3D 引擎占用' : '核心占用'" :metric="gpu" :points="points(gpu)" color="#aeb7f1" @select="choose(gpu)"/><MetricCard title="内存" code="03" :subtitle="capacity(find('memory.used')?.value) + ' / ' + capacity(find('memory.total')?.value)" :metric="memory" :points="points(memory)" color="#9adbc9" @select="choose(memory)"/><MetricCard title="磁盘" code="04" subtitle="首个物理盘活动时间" :metric="disk" :points="points(disk)" color="#9fbacf" @select="choose(disk)"/></div>
+          <div class="metric-grid" data-enter><MetricCard v-for="item in overviewItems" :key="item.id" :title="item.label" :code="item.code" :hardware="item.hardware" :subtitle="item.subtitle" :metric="item.metric" :points="points(item.metric)" :color="item.color" @select="choose(item.metric)"/></div>
           <TemperaturePanel :metrics="metrics" :data-status="dataStatus" @select="choose" @details="showTemperatures"/>
-          <section class="panel main-chart" data-enter><div class="panel-heading"><div><h2>性能变化</h2><p>最近 10 分钟 · 每 2 秒采样</p></div><div class="chart-tabs" aria-label="总览图表指标"><button v-for="item in overviewItems" :key="item.label" :class="{ active: overviewTab === item.label }" :aria-pressed="overviewTab === item.label" :disabled="!item.metric" @click="overviewTab = item.label">{{ item.label }}</button></div></div><TrendChart :key="overviewTab" :points="points(overviewSelected.metric)" :color="overviewSelected.color"/></section>
+          <section class="panel main-chart" data-enter><div class="panel-heading"><div><h2>性能变化</h2><p>{{ overviewSelected.hardware ? overviewSelected.hardware + ' · ' : '' }}最近 10 分钟 · 每 2 秒采样</p></div><div class="chart-tabs" aria-label="总览图表指标"><button v-for="item in overviewItems" :key="item.id" :title="item.hardware || item.label" :class="{ active: overviewSelected.id === item.id }" :aria-pressed="overviewSelected.id === item.id" :disabled="!item.metric" @click="overviewTab = item.id">{{ item.label }}</button></div></div><TrendChart :key="overviewSelected.id" :points="points(overviewSelected.metric)" :color="overviewSelected.color"/></section>
           <div class="lower-grid" data-enter><section class="panel"><div class="panel-heading"><div><h2>主要占用进程</h2><p>{{ latest?.sample?.processes.length ?? 0 }} 个进程</p></div><ElButton type="primary" link @click="view = 'processes'">查看全部</ElButton></div><ProcessTable :processes="latest?.sample?.processes ?? []" compact/></section><section class="panel network-panel"><div class="panel-heading"><h2>网络活动</h2><span class="muted">{{ dataStatus === 'fresh' ? '当前采样' : '最后采样' }}</span></div><div v-for="network in device?.inventory.networks ?? []" :key="network.id" class="network-row"><span>{{ network.name }}</span><div><span>↓ {{ networkValue(network.id, 'network.download') }}</span><span>↑ {{ networkValue(network.id, 'network.upload') }}</span></div></div><p v-if="!device?.inventory.networks.length" class="empty-state">尚无网卡信息</p></section></div>
         </template>
         <template v-else-if="view === 'detail'">

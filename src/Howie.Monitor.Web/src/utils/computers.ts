@@ -10,5 +10,6 @@ export function ageComputerSnapshot(computer: ComputerSummary, elapsedMillisecon
   if (dataStatus === 'fresh') return { ...computer, connectionStatus }
   // 总览请求失败时，各台电脑的快照也会独立过期，旧值不能一直显示为当前读数。
   return { ...computer, dataStatus, connectionStatus, cpuPercent: null, gpuPercent: null, memoryPercent: null,
-    uptimeSeconds: null, temperatures: [], lowestSpaceVolume: null, lowestSpaceBytes: null }
+    uptimeSeconds: null, temperatures: [], lowestSpaceVolume: null, lowestSpaceBytes: null,
+    gpus: computer.gpus?.map(gpu => ({ ...gpu, usage: null })) ?? [] }
 }

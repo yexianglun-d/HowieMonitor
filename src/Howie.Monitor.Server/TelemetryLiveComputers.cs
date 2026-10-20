@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Howie.Monitor.Contracts;
 using Microsoft.Data.Sqlite;
 
@@ -53,6 +54,24 @@ public sealed partial class TelemetryStore
             DataStatus(sample, device?.SessionId, now), connected ? "online" : "disconnected", beat);
     }
 
+    private static bool GpuUsageAvailable(MetricReading? metric) => metric is
+        { Status: MetricStatus.Available, Unit: "%", Value: >= 0 and <= 100 };
+
+    private static GpuSummary[] GpuSummaries(IReadOnlyList<MetricReading> metrics) => metrics
+        .Where(metric => metric.DeviceId.StartsWith("sensor/Gpu", StringComparison.Ordinal) || metric.DeviceId == "gpu")
+        .GroupBy(metric => metric.DeviceId).OrderBy(group => group.Key, StringComparer.Ordinal)
+        .Select(group =>
+        {
+            // 显卡各自选核心占用，不能由枚举顺序把空闲核显当成整台电脑的 GPU。
+            var usage = group.Where(metric => metric.Unit == "%" && metric.Name is "GPU Core" or "D3D 3D" or "GPU 占用")
+                .OrderByDescending(GpuUsageAvailable)
+                .ThenBy(metric => metric.Name == "GPU Core" ? 0 : metric.Name == "D3D 3D" ? 1 : 2)
+                .ThenBy(metric => metric.Key, StringComparer.Ordinal).FirstOrDefault();
+            string source = usage?.Source ?? group.OrderBy(metric => metric.Key, StringComparer.Ordinal).First().Source;
+            var name = Regex.Match(source, @"^LibreHardwareMonitorLib[^:]*:\s*(.+)/[^/]+$");
+            return new GpuSummary(group.Key, name.Success ? name.Groups[1].Value.Trim() : group.Key, usage);
+        }).ToArray();
+
     public IReadOnlyList<ComputerSummary> Computers(DateTimeOffset now)
     {
         lock (_gate)
@@ -68,14 +87,16 @@ public sealed partial class TelemetryStore
                 double? Metric(string key) => view.DataStatus == "fresh"
                     ? view.Sample?.Metrics.FirstOrDefault(value => value.Key == key && value.Unit == "%" && value.Status == MetricStatus.Available)?.Value : null;
                 var metrics = view.DataStatus == "fresh" ? view.Sample?.Metrics ?? [] : [];
-                var gpu = metrics.FirstOrDefault(value => value.DeviceId.StartsWith("sensor/Gpu", StringComparison.Ordinal)
-                    && value.Unit == "%" && value.Name is "D3D 3D" or "GPU Core" && value.Status == MetricStatus.Available);
+                var gpus = GpuSummaries(view.Sample?.Metrics ?? [])
+                    .Select(gpu => view.DataStatus == "fresh" ? gpu : gpu with { Usage = null }).ToArray();
+                // 兼容旧字段；多显卡没有单一占用值，旧客户端应刷新后使用逐显卡列表。
+                double? gpuPercent = gpus.Length == 1 && GpuUsageAvailable(gpus[0].Usage) ? gpus[0].Usage!.Value : null;
                 var volume = metrics.Where(value => value.Key == "volume.free" && value.Unit == "B"
                     && value.Status == MetricStatus.Available && value.Value is >= 0).OrderBy(value => value.Value).FirstOrDefault();
                 return new ComputerSummary(device.DeviceId, device.Name, view.DataStatus, view.ConnectionStatus,
-                    view.Sample?.SampledAt, view.LastHeartbeat, Metric("cpu.usage"), Metric("memory.usage"), gpu?.Value,
+                    view.Sample?.SampledAt, view.LastHeartbeat, Metric("cpu.usage"), Metric("memory.usage"), gpuPercent,
                     view.DataStatus == "fresh" ? view.Sample?.UptimeSeconds : null,
-                    metrics.Where(value => value.Unit == "°C").ToArray(), volume?.DeviceId, volume?.Value, now);
+                    metrics.Where(value => value.Unit == "°C").ToArray(), volume?.DeviceId, volume?.Value, now, gpus);
             }).ToArray();
         }
     }

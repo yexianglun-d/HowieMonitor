@@ -115,6 +115,52 @@ public sealed class MultiComputerTests : IDisposable
         { Assert.Empty(value.Temperatures!); Assert.Null(value.GpuPercent); Assert.Null(value.LowestSpaceBytes); Assert.Null(value.UptimeSeconds); });
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void IdleIntegratedGpuDoesNotHideDiscreteGpuAndEachKeepsItsOwnHistory(bool reversed)
+    {
+        MetricReading Gpu(string id, string name, double value, string hardware) => MetricReading.Present(
+            id + "/" + name, id, name, value, "%", "LibreHardwareMonitorLib 0.9.6: " + hardware + "/Load");
+        MetricReading[] readings = [Gpu("sensor/GpuAmd/1", "D3D 3D", 0, "AMD Radeon(TM) Graphics"),
+            Gpu("sensor/GpuAmd/1", "GPU Core", 0, "AMD Radeon(TM) Graphics"),
+            Gpu("sensor/GpuNvidia/2", "D3D 3D", 5.17, "NVIDIA GeForce RTX 5070 Ti"),
+            Gpu("sensor/GpuNvidia/2", "GPU Core", 5, "NVIDIA GeForce RTX 5070 Ti"),
+            Gpu("sensor/GpuNvidia/2", "GPU Memory", 80, "NVIDIA GeForce RTX 5070 Ti"),
+            Gpu("sensor/GpuNvidia/2", "GPU Bus", 95, "NVIDIA GeForce RTX 5070 Ti")];
+        var sample = Sample(_original.DeviceId, 10, 1) with { Metrics = reversed ? readings.Reverse().ToArray() : readings };
+        Assert.Null(_store.IngestAuthenticated(Auth(_original), new(false, [sample]), _now).Error);
+        var summary = Assert.Single(_store.Computers(_now));
+        Assert.Null(summary.GpuPercent); Assert.Equal(2, summary.Gpus!.Count);
+        Assert.Equal("AMD Radeon(TM) Graphics", summary.Gpus[0].Name); Assert.Equal(0, summary.Gpus[0].Usage!.Value);
+        Assert.Equal("NVIDIA GeForce RTX 5070 Ti", summary.Gpus[1].Name); Assert.Equal(5, summary.Gpus[1].Usage!.Value);
+        Assert.All(summary.Gpus, gpu => Assert.Equal("GPU Core", gpu.Usage!.Name));
+        foreach (var gpu in summary.Gpus)
+            Assert.Equal(gpu.Usage!.Value, _store.QueryHistory(_original.DeviceId, gpu.Usage.Key, gpu.DeviceId, "%", 1, _now).Maximum);
+        var expired = Assert.Single(_store.Computers(_now.AddSeconds(40)));
+        Assert.Equal(2, expired.Gpus!.Count); Assert.All(expired.Gpus, gpu => Assert.Null(gpu.Usage));
+        var json = JsonSerializer.Serialize(summary, ProtocolJson.Options);
+        using var document = JsonDocument.Parse(json);
+        Assert.Equal(2, document.RootElement.GetProperty("gpus").GetArrayLength());
+    }
+
+    [Fact] public void GpuSummariesKeepIdenticalModelsAndMissingReadingsSeparateAndUseAvailableD3dFallback()
+    {
+        var sample = Sample(_original.DeviceId, 10, 1) with { Metrics = [
+            MetricReading.Missing("core", "sensor/GpuIntel/1", "GPU Core", "%", "test", MetricStatus.Unknown, "Unavailable"),
+            MetricReading.Present("d3d", "sensor/GpuIntel/1", "D3D 3D", 28, "%", "LibreHardwareMonitorLib 0.9.6: Intel Graphics/Load"),
+            MetricReading.Present("core", "sensor/GpuNvidia/2", "GPU Core", 0, "%", "LibreHardwareMonitorLib 0.9.6: Same Model/Load"),
+            MetricReading.Present("temp", "sensor/GpuNvidia/3", "GPU Core", 50, "°C", "LibreHardwareMonitorLib 0.9.6: Same Model/Temperature")] };
+        Assert.Null(_store.IngestAuthenticated(Auth(_original), new(false, [sample]), _now).Error);
+        var summary = Assert.Single(_store.Computers(_now));
+        Assert.Equal(3, summary.Gpus!.Count);
+        Assert.Equal(28, summary.Gpus.Single(gpu => gpu.DeviceId == "sensor/GpuIntel/1").Usage!.Value);
+        Assert.Equal("D3D 3D", summary.Gpus.Single(gpu => gpu.DeviceId == "sensor/GpuIntel/1").Usage!.Name);
+        Assert.Equal(0, summary.Gpus.Single(gpu => gpu.DeviceId == "sensor/GpuNvidia/2").Usage!.Value);
+        Assert.Null(summary.Gpus.Single(gpu => gpu.DeviceId == "sensor/GpuNvidia/3").Usage);
+        Assert.Equal(2, summary.Gpus.Count(gpu => gpu.Name == "Same Model"));
+    }
+
     [Fact] public void ExplicitLegacyReplacementDoesNotRevokeOtherComputers()
     {
         var second = Activate(40);

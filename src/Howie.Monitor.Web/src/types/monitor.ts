@@ -28,9 +28,11 @@ export interface HistorySeries {
 }
 export interface HistoricalProcesses { sampledAt: string; processes: ProcessReading[] }
 export interface AuthSession { authenticated: boolean; setupRequired: boolean }
+export interface GpuSummary { deviceId: string; name: string; usage: Metric | null }
 
 export interface ComputerSummary {
   deviceId: string; name: string; dataStatus: string; connectionStatus: string; sampledAt: string | null; lastHeartbeat: string | null
   cpuPercent: number | null; memoryPercent: number | null; gpuPercent?: number | null; uptimeSeconds?: number | null
   temperatures?: Metric[] | null; lowestSpaceVolume?: string | null; lowestSpaceBytes?: number | null; serverNow?: string | null
+  gpus?: GpuSummary[] | null
 }
