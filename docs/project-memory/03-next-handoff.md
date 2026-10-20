@@ -2,12 +2,21 @@
 
 ## 下次继续
 
-- 先运行 `git status --short --branch` 与 `git log -5 --oneline`。当前代码保留合并提交 `ebdb039` 和温度修复 `76e8452`，新增电脑总览与按电脑独立通知规则；本次未推送或部署。
+- 先运行 `git status --short --branch` 与 `git log -5 --oneline`。应用代码 `42b30e6` 已于 2026-10-20 部署至 `https://monitor.howied.me/`，包含此前 Toast、温度展示、多电脑总览与独立通知规则；本地提交尚未推送 GitHub。
 - 总览默认路由 `#computers`，各卡片直接进入对应电脑的总览/通知。`/api/notifications/computer?computerId=...` 必须明确电脑归属；全局 `/api/notifications` 只管理共用发送渠道与无归属旧记录。
 - `NotificationStore` 一次性把旧规则复制给当时已接入的电脑；迁移标记持久化，新增电脑默认空规则。不能重跑迁移、把旧任务强行猜测归属，或让保存 A 清空 B 的观察状态。
-- 用户反馈“温度都没有”：已确认两项原因。线上只按英文原名搜索，中文“温度”返回 0 项；实际 CPU 上报驱动缺失，其他 GPU/SSD 有可用读数。
-- 新温度区域与中文搜索在本地通过只读代理使用真实线上数据验证；不能据此声称线上页面已经更新。
-- CPU 温度仍需在相应 Windows 电脑安装/修复 PawnIO，再重启 `HowieMonitorAgent` 并验证最新上报；用户只授权本轮读取实际面板，未执行驱动安装或生产部署。
+- 用户反馈“温度都没有”：排查时确认旧版页面只按英文原名搜索，中文“温度”返回 0 项；实际 CPU 上报驱动缺失，其他 GPU/SSD 有可用读数。搜索与展示问题已随新版部署，驱动问题仍独立存在。
+- 新温度区域与中文搜索已随 `42b30e6` 部署；生产首页和构建资源已核对。内置浏览器线上 DOM/截图连接超时，本次未完成生产页面视觉复核，不要把本地证据当成线上截图。
+- CPU 温度仍需在相应 Windows 电脑安装/修复 PawnIO，再重启 `HowieMonitorAgent` 并验证最新上报；生产部署没有修改 Windows 驱动或安装包。
+
+## 当前部署
+
+- 服务器上的 `howie-monitor` Docker 容器配置保持原样；`/opt/howie-monitor/current` 指向 `/opt/howie-monitor/releases/20261020-42b30e6`，数据位于 `/var/lib/howie-monitor`。
+- 已验证备份：`/opt/howie-monitor/backups/monitor-20261020-052017.tar.gz`，SHA-256 为 `4c37e74819873edea788ee205d8baf42817d6b17322d5659ab1cc7a4bc8b6ad8`，同目录保留 `.sha256` 和 `.verified.json`。备份停服约 19.43 秒，正式版本切换约 3.4 秒。
+- 原版本保留于 `/opt/howie-monitor/releases/20261019-133500/Howie.Monitor.Server-0.1.0-linux-x64-20261019-132130`；部署清单、演练与切换结果位于服务器 `/opt/howie-monitor/staging/deploy-42b30e6-20261020/`。凭据和数据库仅保留在服务器受限目录，项目日志不记录密码。
+- 旧通知 JSON 已一次性迁移为 4 个独立规则列表，各保留原来的 1 条规则。回退旧版本前必须评估新旧通知结构；不能直接覆盖旧快照而重放通知或重置已消耗预算，也不能重跑迁移覆盖用户后续编辑。
+- 部署后真实在线电脑采样序号持续增长，历史数据继续写入；其他 3 台原有离线电脑的最后采样仍保留。未主动发送真实测试通知。
+- 按用户偏好使用内置浏览器；此前本任务启动的 3 个 Playwright Chrome 会话已关闭，后续不要再批量启动外部 Chrome。
 
 ## 已知边界
 
