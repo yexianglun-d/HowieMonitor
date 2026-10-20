@@ -8,9 +8,11 @@ public sealed record AlertRule(string Id, string Name, bool Enabled, string Kind
 public sealed record NotificationSettings(bool Enabled, int DailyLimit, bool HasCredential, IReadOnlyList<AlertRule> Rules);
 public sealed record NotificationUpdate(bool Enabled, int DailyLimit, string? SendKey, bool ClearCredential, IReadOnlyList<AlertRule>? Rules);
 public sealed record AlertEvent(string Id, string? RuleId, string Kind, string Title, string Description,
-    DateTimeOffset CreatedAt, string Status, string? Detail = null, DateTimeOffset? SentAt = null);
+    DateTimeOffset CreatedAt, string Status, string? Detail = null, DateTimeOffset? SentAt = null, string? ComputerId = null);
 public sealed record NotificationView(NotificationSettings Settings, IReadOnlyList<AlertEvent> Events,
     int RequestsToday, string BudgetDate);
+public sealed record ComputerNotificationUpdate(IReadOnlyList<AlertRule>? Rules);
+public sealed record ComputerNotificationView(string ComputerId, IReadOnlyList<AlertRule> Rules, IReadOnlyList<AlertEvent> Events);
 public sealed class AlertRuleState
 {
     public bool Triggered { get; set; }
@@ -29,8 +31,14 @@ public static class AlertRules
         if (update.SendKey is not null && !ServerChanSender.ValidKey(update.SendKey))
             return "请填写 Server酱 Turbo 的 SCT 开头 SendKey。";
         if (update.ClearCredential && update.SendKey is not null) return "清除和更新密钥不能同时执行。";
+        return ValidateRules(update.Rules);
+    }
+
+    public static string? ValidateRules(IReadOnlyList<AlertRule>? rules)
+    {
+        if (rules is null || rules.Count > 20) return "每台电脑最多配置 20 项规则。";
         HashSet<string> ids = [];
-        foreach (var rule in update.Rules)
+        foreach (var rule in rules)
         {
             if (rule is null || !Guid.TryParse(rule.Id, out _) || !ids.Add(rule.Id) || string.IsNullOrWhiteSpace(rule.Name)
                 || rule.Name.Length > 64 || rule.Name.Any(char.IsControl) || rule.Kind is not ("metric" or "offline")

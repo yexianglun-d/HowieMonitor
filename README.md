@@ -2,7 +2,7 @@
 
 A personal Windows 11 performance monitor with an HTTPS server and a responsive web dashboard. It reports real CPU, GPU, memory, disk, network and process measurements, keeps up to seven days of history, and supports optional ServerChan Turbo notifications.
 
-The current source supports monitoring multiple computers under one private dashboard, with separate device credentials, live state and history. Adding a computer keeps existing computers enrolled. Notification rules and request budgets are shared, with independent trigger/recovery state per computer. Previously published installers can use the additive pairing flow after the server is upgraded.
+The current source supports monitoring multiple computers under one private dashboard, with separate device credentials, live state and history. Adding a computer keeps existing computers enrolled. Notification rules, trigger/recovery state and sending records are separate per computer. The SendKey, delivery switch and daily request budget are shared. On upgrade, existing shared rules are copied once to currently enrolled computers; newly added computers start without rules. The computer overview shows separate cards and opens the selected computer directly. Previously published installers can use the additive pairing flow after the server is upgraded.
 
 The Windows installer guides an authorized user through environment checks, a short-lived pairing code, explicit installation confirmation, Windows administrator consent, and verification of real telemetry. Temperature and power readings depend on hardware and permissions; unavailable readings stay marked as unavailable. The installer does not install sensor drivers.
 

@@ -35,7 +35,7 @@ export function useNotifications() {
     const current = generation; busy.value = true
     try {
       const value = await api.saveNotifications({ enabled: settings.value.enabled, dailyLimit: settings.value.dailyLimit,
-        sendKey: sendKey.value.trim() || null, clearCredential: clearCredential.value, rules: settings.value.rules.map(rule => ({ ...rule })) }, controller.signal)
+        sendKey: sendKey.value.trim() || null, clearCredential: clearCredential.value, rules: [] }, controller.signal)
       if (current !== generation) return
       update(value, true); sendKey.value = ''; clearCredential.value = false; error.value = ''; toast.success('通知设置已保存')
     } catch (err) { if (current === generation && !controller.signal.aborted) toast.error(err instanceof Error ? err.message : '设置保存失败，请重试。') }

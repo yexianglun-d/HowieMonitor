@@ -1,15 +1,17 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import * as api from '../api/monitor'
 import { ApiError } from '../api/request'
+import { ageComputerSnapshot } from '../utils/computers'
 import type { ComputerSummary, Device, Latest, Metric, HistoryPoint } from '../types/monitor'
 
 export function useMonitor(initialComputerId = '') {
   const authenticated = ref(false), setupRequired = ref(false), initializing = ref(true), busy = ref(false)
   const connectionError = ref(''), authError = ref(''), device = ref<Device | null>(null), latest = ref<Latest | null>(null)
   const error = computed(() => authError.value || connectionError.value)
-  const computers = ref<ComputerSummary[]>([]), selectedComputerId = ref(initialComputerId)
+  const computerSnapshots = ref<ComputerSummary[]>([]), selectedComputerId = ref(initialComputerId), computersFetchedAt = ref(0)
   const computerLoading = ref(false)
   const history = ref<Record<string, HistoryPoint[]>>({}), activeMetric = ref<Metric | null>(null), now = ref(Date.now())
+  const computers = computed(() => computerSnapshots.value.map(computer => ageComputerSnapshot(computer, now.value - computersFetchedAt.value)))
   let timer: ReturnType<typeof setTimeout> | undefined, clock: ReturnType<typeof setInterval> | undefined
   let controller: AbortController | null = null, generation = 0, serverFetchedAt = 0
   const metrics = computed(() => latest.value?.sample?.metrics ?? [])
@@ -32,7 +34,7 @@ export function useMonitor(initialComputerId = '') {
   function stop() { generation++; clearTimeout(timer); controller?.abort(); controller = null }
   function clearComputer() { device.value = null; latest.value = null; history.value = {}; activeMetric.value = null }
   function selectComputer(id: string) {
-    if (id === selectedComputerId.value || !computers.value.some(computer => computer.deviceId === id)) return
+    if (!id || id === selectedComputerId.value) return
     // 切换先取消并清空旧快照，迟到响应由 generation 拒绝，避免混入另一台电脑的值。
     stop(); selectedComputerId.value = id; clearComputer(); computerLoading.value = true; connectionError.value = ''; void poll()
   }
@@ -44,12 +46,17 @@ export function useMonitor(initialComputerId = '') {
     try {
       const result = await api.getComputers(requestController.signal)
       if (currentGeneration !== generation) return
-      computers.value = result
-      const computerId = result.some(computer => computer.deviceId === selectedComputerId.value) ? selectedComputerId.value : result[0]?.deviceId ?? ''
+      computerSnapshots.value = result; computersFetchedAt.value = Date.now()
+      if (selectedComputerId.value && !result.some(computer => computer.deviceId === selectedComputerId.value)) {
+        clearComputer(); throw new Error('所选电脑不存在，请从电脑总览重新选择。')
+      }
+      const computerId = selectedComputerId.value || result[0]?.deviceId || ''
       if (computerId !== selectedComputerId.value) { selectedComputerId.value = computerId; clearComputer() }
       if (!computerId) { clearComputer(); connectionError.value = ''; return }
       const [newDevice, newLatest] = await Promise.all([api.getDevice(computerId, requestController.signal), api.getLatest(computerId, requestController.signal)])
       if (currentGeneration !== generation) return
+      if (newDevice?.deviceId !== computerId || (newLatest.sample && newLatest.sample.deviceId !== computerId))
+        throw new Error('监控数据的电脑归属不一致，请重新读取。')
       device.value = newDevice; latest.value = newLatest; serverFetchedAt = Date.now(); connectionError.value = ''
       const tracked = [...highlights.value, activeMetric.value].filter((metric): metric is Metric => metric !== null)
       const histories = await Promise.all(tracked.map(async metric => [
@@ -60,7 +67,7 @@ export function useMonitor(initialComputerId = '') {
       history.value = { ...history.value, ...Object.fromEntries(histories) }
     } catch (err) {
       if (currentGeneration !== generation || (err instanceof DOMException && err.name === 'AbortError')) return
-      if (err instanceof ApiError && err.status === 401) { authenticated.value = false; computers.value = []; selectedComputerId.value = ''; clearComputer() }
+      if (err instanceof ApiError && err.status === 401) { authenticated.value = false; computerSnapshots.value = []; selectedComputerId.value = ''; clearComputer() }
       connectionError.value = err instanceof Error ? err.message : '无法连接监控服务。'
     } finally {
       if (currentGeneration === generation) {
@@ -77,7 +84,7 @@ export function useMonitor(initialComputerId = '') {
   }
   async function signOut() {
     busy.value = true; authError.value = ''
-    try { await api.logout(); stop(); authenticated.value = false; computers.value = []; selectedComputerId.value = ''; clearComputer(); history.value = {} }
+    try { await api.logout(); stop(); authenticated.value = false; computerSnapshots.value = []; selectedComputerId.value = ''; clearComputer(); history.value = {} }
     catch (err) { authError.value = err instanceof Error ? err.message : '退出失败，请重试。' }
     finally { busy.value = false }
   }

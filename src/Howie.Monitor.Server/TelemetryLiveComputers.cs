@@ -67,8 +67,15 @@ public sealed partial class TelemetryStore
                 var view = ReadLatest(db, device.DeviceId, now);
                 double? Metric(string key) => view.DataStatus == "fresh"
                     ? view.Sample?.Metrics.FirstOrDefault(value => value.Key == key && value.Unit == "%" && value.Status == MetricStatus.Available)?.Value : null;
+                var metrics = view.DataStatus == "fresh" ? view.Sample?.Metrics ?? [] : [];
+                var gpu = metrics.FirstOrDefault(value => value.DeviceId.StartsWith("sensor/Gpu", StringComparison.Ordinal)
+                    && value.Unit == "%" && value.Name is "D3D 3D" or "GPU Core" && value.Status == MetricStatus.Available);
+                var volume = metrics.Where(value => value.Key == "volume.free" && value.Unit == "B"
+                    && value.Status == MetricStatus.Available && value.Value is >= 0).OrderBy(value => value.Value).FirstOrDefault();
                 return new ComputerSummary(device.DeviceId, device.Name, view.DataStatus, view.ConnectionStatus,
-                    view.Sample?.SampledAt, view.LastHeartbeat, Metric("cpu.usage"), Metric("memory.usage"));
+                    view.Sample?.SampledAt, view.LastHeartbeat, Metric("cpu.usage"), Metric("memory.usage"), gpu?.Value,
+                    view.DataStatus == "fresh" ? view.Sample?.UptimeSeconds : null,
+                    metrics.Where(value => value.Unit == "°C").ToArray(), volume?.DeviceId, volume?.Value, now);
             }).ToArray();
         }
     }

@@ -24,7 +24,8 @@ builder.Services.AddSingleton(new CredentialStore(dataDirectory));
 builder.Services.AddSingleton(new TelemetryStore(dataDirectory));
 builder.Services.AddHostedService<HistoryMaintenanceWorker>();
 builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(dataDirectory, "keys")));
-builder.Services.AddSingleton(provider => new NotificationStore(dataDirectory, provider.GetRequiredService<Microsoft.AspNetCore.DataProtection.IDataProtectionProvider>()));
+builder.Services.AddSingleton(provider => new NotificationStore(dataDirectory, provider.GetRequiredService<IDataProtectionProvider>(),
+    provider.GetRequiredService<TelemetryStore>().Computers(DateTimeOffset.UtcNow).Select(computer => computer.DeviceId).ToArray()));
 builder.Services.AddSingleton<ServerChanSender>();
 // 持续规则观察独立于外部发送请求，发送超时不能打断采样证据。
 builder.Services.AddHostedService<NotificationEvaluationWorker>();
@@ -172,6 +173,19 @@ viewing.MapPost("/notifications/test", (NotificationStore store) =>
 {
     string? error = store.QueueTest(DateTimeOffset.UtcNow, (hosting.PublicUrl ?? hosting.ListenUrl).AbsoluteUri);
     return error is null ? Results.Ok(store.View(DateTimeOffset.UtcNow)) : Results.BadRequest(new { error });
+}).AddEndpointFilter(Csrf);
+viewing.MapGet("/notifications/computer", (string? computerId, NotificationStore store, TelemetryStore telemetry) =>
+{
+    if (computerId is null || !ValidComputerId(computerId)) return Results.BadRequest(new { error = "请选择有效电脑。" });
+    return telemetry.Device(computerId) is null ? Results.NotFound(new { error = "电脑尚未接入。" })
+        : Results.Ok(store.ViewComputer(computerId));
+});
+viewing.MapPut("/notifications/computer", (string? computerId, ComputerNotificationUpdate update, NotificationStore store, TelemetryStore telemetry) =>
+{
+    if (computerId is null || !ValidComputerId(computerId)) return Results.BadRequest(new { error = "请选择有效电脑。" });
+    if (telemetry.Device(computerId) is null) return Results.NotFound(new { error = "电脑尚未接入。" });
+    string? error = store.UpdateComputer(computerId, update);
+    return error is null ? Results.Ok(store.ViewComputer(computerId)) : Results.BadRequest(new { error });
 }).AddEndpointFilter(Csrf);
 viewing.MapGet("/computers", (TelemetryStore store) => Results.Ok(store.Computers(DateTimeOffset.UtcNow)));
 viewing.MapGet("/device", (string? computerId, TelemetryStore store) =>

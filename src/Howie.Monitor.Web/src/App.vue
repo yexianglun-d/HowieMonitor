@@ -17,6 +17,7 @@ import EnrollmentView from './views/monitor/EnrollmentView.vue'
 import HardwareView from './views/monitor/HardwareView.vue'
 import ComputerSelector from './views/monitor/components/ComputerSelector.vue'
 import TemperaturePanel from './views/monitor/components/TemperaturePanel.vue'
+import ComputersView from './views/monitor/ComputersView.vue'
 import type { Metric, HistoryMetric } from './types/monitor'
 
 const initial = readLocation(window.location.hash)
@@ -24,9 +25,10 @@ const { computers, selectedComputerId, selectComputer, authenticated, setupRequi
 const toast = useToast()
 const password = ref(''), view = ref(initial.page), pageRoot = ref<HTMLElement | null>(null)
 const overviewTab = ref('CPU'), metricQuery = ref(''), detailChart = ref<HTMLElement | null>(null)
-const nav = [{ key: 'overview', title: '运行总览', short: '总览' }, { key: 'detail', title: '指标详情', short: '指标' }, { key: 'processes', title: '进程列表', short: '进程' }, { key: 'history', title: '历史记录', short: '历史' }, { key: 'hardware', title: '硬件信息', short: '硬件' }, { key: 'notifications', title: '通知设置', short: '通知' }, { key: 'enrollment', title: '电脑接入', short: '接入' }] as const
+const nav = [{ key: 'computers', title: '电脑总览', short: '电脑' }, { key: 'overview', title: '运行总览', short: '总览' }, { key: 'detail', title: '指标详情', short: '指标' }, { key: 'processes', title: '进程列表', short: '进程' }, { key: 'history', title: '历史记录', short: '历史' }, { key: 'hardware', title: '硬件信息', short: '硬件' }, { key: 'notifications', title: '通知设置', short: '通知' }, { key: 'enrollment', title: '电脑接入', short: '接入' }] as const
 const title = computed(() => nav.find(item => item.key === view.value)!.title)
-const devicePage = computed(() => !['history', 'notifications', 'enrollment'].includes(view.value))
+const devicePage = computed(() => !['computers', 'history', 'notifications', 'enrollment'].includes(view.value))
+const scopedPage = computed(() => !['computers', 'history', 'enrollment'].includes(view.value))
 const statusLabel = computed(() => ({ fresh: '数据最新', delayed: '更新延迟', stale: '数据过期', waiting: '等待采样', clockError: '时钟异常' })[dataStatus.value] ?? '未知状态')
 const selected = computed(() => activeMetric.value ? metrics.value.find(metric => metric.key === activeMetric.value!.key && metric.deviceId === activeMetric.value!.deviceId) ?? activeMetric.value : cpu.value)
 // 总览仅使用四个百分比指标，详情选择不能改变总览的单位与坐标。
@@ -57,6 +59,7 @@ watch(authenticated, () => toast.clear())
 function points(metric: Metric | null) { return metric ? history.value[metric.deviceId + ':' + metric.key] ?? [] : [] }
 function choose(metric: Metric | null) { if (!metric) return; activeMetric.value = metric; view.value = 'detail'; void locateChart() }
 function showTemperatures() { metricQuery.value = '温度'; view.value = 'detail' }
+function openComputer(id: string, page: 'overview' | 'notifications') { selectComputer(id); view.value = page }
 async function locateChart() {
   await nextTick()
   detailChart.value?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })
@@ -64,21 +67,24 @@ async function locateChart() {
 }
 function metricValue(metric: Metric | null) { if (!metric || metric.value === null) return '—'; return metric.unit === 'B' ? capacity(metric.value) : metric.unit === 'B/s' ? rate(metric.value) : number(metric.value) + ' ' + metric.unit }
 function networkValue(id: string, key: string) { return rate(metrics.value.find(metric => metric.deviceId === id && metric.key === key)?.value) }
-function groupName(group: string) {
+function groupName(group: string, useCurrentInventory = true) {
   if (group === 'cpu/logical') return 'CPU 逻辑处理器'
   if (group === 'cpu/total') return 'CPU'
   if (group === 'memory') return '内存'
   if (group.startsWith('sensor/Cpu')) return 'CPU 传感器'
   if (group.startsWith('sensor/Gpu') || group === 'gpu') return 'GPU'
-  const network = device.value?.inventory.networks.find(item => item.id === group)
+  const network = useCurrentInventory ? device.value?.inventory.networks.find(item => item.id === group) : null
   if (network) return '网络 · ' + network.name
-  const physical = device.value?.inventory.physicalDisks.find(item => item.id === group)
+  const physical = useCurrentInventory ? device.value?.inventory.physicalDisks.find(item => item.id === group) : null
   if (physical) return '磁盘 ' + physical.index + ' · ' + physical.name
   if (group.startsWith('sensor/Storage') || group === 'disk') return '磁盘'
+  if (group.startsWith('disk/')) return '磁盘 ' + group.split('/').at(-1)
+  if (group.startsWith('network/')) return '网络 · ' + group
   return '分区 ' + group
 }
 function metricName(metric: Metric) { return metric.unit === '°C' ? temperatureLabel(metric) : metric.deviceId.startsWith('cpu/logical/') ? '逻辑处理器 ' + metric.deviceId.split('/').at(-1) : metric.name }
-function historyMetricLabel(metric: HistoryMetric) { return groupName(metric.deviceId.startsWith('cpu/logical/') ? 'cpu/logical' : metric.deviceId) + ' · ' + (metric.deviceId.startsWith('cpu/logical/') ? '逻辑处理器 ' + metric.deviceId.split('/').at(-1) : metric.name) }
+// 历史页可独立选择电脑，不能借用当前电脑的磁盘型号或网卡名称。
+function historyMetricLabel(metric: HistoryMetric) { return groupName(metric.deviceId.startsWith('cpu/logical/') ? 'cpu/logical' : metric.deviceId, false) + ' · ' + (metric.deviceId.startsWith('cpu/logical/') ? '逻辑处理器 ' + metric.deviceId.split('/').at(-1) : metric.name) }
 async function submit() { await signIn(password.value); if (authenticated.value) password.value = ''; else if (error.value) toast.error(error.value) }
 async function logout() { await signOut(); if (authenticated.value && error.value) toast.error(error.value) }
 </script>
@@ -110,15 +116,16 @@ async function logout() { await signOut(); if (authenticated.value && error.valu
       <div class="sidebar-bottom"><div class="device-mini"><span class="connection-dot" :class="{ online: connectionStatus === 'online' }"></span><div><strong>{{ device?.name ?? '尚无电脑' }}</strong><small>{{ connectionStatus === 'online' ? '采集端在线' : '采集端离线' }}</small></div></div><button class="logout-button" :disabled="busy" @click="logout">退出登录</button><span class="version">Howie Monitor · v0.1 · <a href="/third-party-notices.txt" target="_blank" rel="noopener">开源许可</a></span></div>
     </aside>
     <main id="main-content" class="workspace" tabindex="-1">
-      <header class="topbar" :class="{ global: !devicePage }"><span>设备监控 <span class="separator">/</span> {{ title }}</span><div v-if="devicePage" class="topbar-right"><ElTag disable-transitions :type="dataStatus === 'fresh' ? 'success' : 'warning'" effect="plain" round>{{ statusLabel }}</ElTag><time>{{ time(latest?.sample?.sampledAt) }}</time></div><span v-else class="muted">{{ view === 'history' ? '历史查询' : '所有电脑' }}</span></header>
+      <header class="topbar" :class="{ global: !devicePage }"><span>设备监控 <span class="separator">/</span> {{ title }}</span><div v-if="devicePage" class="topbar-right"><ElTag disable-transitions :type="dataStatus === 'fresh' ? 'success' : 'warning'" effect="plain" round>{{ statusLabel }}</ElTag><time>{{ time(latest?.sample?.sampledAt) }}</time></div><span v-else class="muted">{{ view === 'history' ? '历史查询' : view === 'notifications' ? device?.name ?? '选择电脑' : '所有电脑' }}</span></header>
       <div ref="pageRoot" class="page-content">
-        <div class="page-heading" data-enter><div><h1 tabindex="-1">{{ title }}</h1><p class="page-description">{{ devicePage ? device?.inventory.operatingSystem ?? '选择电脑查看数据' : view === 'history' ? '按电脑、指标和时间查询。' : view === 'notifications' ? '所有电脑共用以下规则。' : '在 Windows 电脑上安装采集端。' }}</p></div><div v-if="devicePage && latest?.sample" class="uptime-block"><span>连续运行</span><strong>{{ uptime(latest.sample.uptimeSeconds) }}</strong></div></div>
-        <ComputerSelector v-if="devicePage" :computers="computers" :selected-id="selectedComputerId" @select="selectComputer" @enroll="view = 'enrollment'"/>
+        <div class="page-heading" data-enter><div><h1 tabindex="-1">{{ title }}</h1><p class="page-description">{{ view === 'computers' ? '每台电脑独立展示，选择电脑查看详情。' : view === 'notifications' ? '提醒规则按电脑单独配置。' : devicePage ? (device?.name ?? '选择电脑') + ' · ' + (device?.inventory.operatingSystem ?? '') : view === 'history' ? '按电脑、指标和时间查询。' : '在 Windows 电脑上安装采集端。' }}</p></div><div v-if="devicePage && latest?.sample" class="uptime-block"><span>连续运行</span><strong>{{ uptime(latest.sample.uptimeSeconds) }}</strong></div></div>
+        <ComputerSelector v-if="scopedPage" :computers="computers" :selected-id="selectedComputerId" @select="selectComputer" @enroll="view = 'enrollment'"/>
         <ElAlert v-if="connectionError" :title="connectionError" type="error" show-icon :closable="false"/>
         <div v-if="devicePage && dataStatus !== 'fresh' && latest?.sample" class="state-banner" role="status">{{ statusLabel }} · 以下为 {{ time(latest.sample.sampledAt) }} 的采样。<ElButton type="primary" link @click="view = 'enrollment'">检查电脑接入</ElButton></div>
         <ElCollapse class="help-details" v-if="devicePage && latest?.agent?.droppedSamples"><ElCollapseItem title="历史存在空缺" name="details"><p>采集端缓存已淘汰 {{ latest.agent.droppedSamples }} 个样本。</p></ElCollapseItem></ElCollapse>
 
-        <section v-if="devicePage && computerLoading" class="panel computer-loading" aria-busy="true" aria-label="正在读取电脑信息"><ElSkeleton :rows="6"/></section>
+        <ComputersView v-if="view === 'computers'" :computers="computers" @open="openComputer" @enroll="view = 'enrollment'"/>
+        <section v-else-if="devicePage && computerLoading" class="panel computer-loading" aria-busy="true" aria-label="正在读取电脑信息"><ElSkeleton :rows="6"/></section>
         <section v-else-if="devicePage && !latest?.sample && view !== 'hardware'" class="panel welcome-state" data-enter><span class="empty-mark" aria-hidden="true">H</span><h2>{{ computers.length ? '等待这台电脑上报' : '添加你的第一台电脑' }}</h2><p>{{ computers.length ? '请确认采集端服务正在运行，收到数据后会自动更新。' : '安装 Windows 采集端后，即可查看运行状态。' }}</p><ElButton type="primary" @click="view = 'enrollment'">{{ computers.length ? '查看接入步骤' : '添加电脑' }}</ElButton><ElButton type="primary" link v-if="computers.length" @click="view = 'history'">查看已有历史</ElButton></section>
         <template v-else-if="view === 'overview'">
           <div class="metric-grid" data-enter><MetricCard title="CPU" code="01" subtitle="整机占用" :metric="cpu" :points="points(cpu)" color="#e8c58c" @select="choose(cpu)"/><MetricCard title="GPU" code="02" :subtitle="gpu?.name === 'D3D 3D' ? '3D 引擎占用' : '核心占用'" :metric="gpu" :points="points(gpu)" color="#aeb7f1" @select="choose(gpu)"/><MetricCard title="内存" code="03" :subtitle="capacity(find('memory.used')?.value) + ' / ' + capacity(find('memory.total')?.value)" :metric="memory" :points="points(memory)" color="#9adbc9" @select="choose(memory)"/><MetricCard title="磁盘" code="04" subtitle="首个物理盘活动时间" :metric="disk" :points="points(disk)" color="#9fbacf" @select="choose(disk)"/></div>
@@ -136,7 +143,7 @@ async function logout() { await signOut(); if (authenticated.value && error.valu
         <HistoryView v-else-if="view === 'history'" :device-id="selectedComputerId || undefined" :label="historyMetricLabel"/>
         <HardwareView v-else-if="view === 'hardware'" :device="device" :metrics="metrics" :data-status="dataStatus" @select="choose" @temperatures="showTemperatures" @enroll="view = 'enrollment'"/>
         <div v-show="view === 'notifications' || view === 'enrollment'" data-enter>
-          <KeepAlive><NotificationsView v-if="view === 'notifications'" :metrics="metrics" :label="historyMetricLabel"/><EnrollmentView v-else-if="view === 'enrollment'"/></KeepAlive>
+          <KeepAlive><NotificationsView v-if="view === 'notifications'" :computer-id="selectedComputerId" :computer-name="device?.name ?? computers.find(computer => computer.deviceId === selectedComputerId)?.name ?? ''" :metrics="metrics" :label="historyMetricLabel"/><EnrollmentView v-else-if="view === 'enrollment'"/></KeepAlive>
         </div>
         <footer v-if="devicePage && latest?.sample" class="page-footer"><span>采样 {{ time(latest.sample.sampledAt) }}</span><span>采集耗时 {{ number(latest.sample.collectionMilliseconds) }} ms · 心跳 {{ time(latest.lastHeartbeat) }}</span></footer>
       </div>

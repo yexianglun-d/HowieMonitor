@@ -24,7 +24,9 @@ public sealed record HistoryMetric(string Key, string DeviceId, string Name, str
 public sealed record HistoryComputer(string DeviceId, string? Name, bool IsCurrent,
     DateTimeOffset? FirstSampleAt, DateTimeOffset? LastSampleAt);
 public sealed record ComputerSummary(string DeviceId, string Name, string DataStatus, string ConnectionStatus,
-    DateTimeOffset? SampledAt, DateTimeOffset? LastHeartbeat, double? CpuPercent, double? MemoryPercent);
+    DateTimeOffset? SampledAt, DateTimeOffset? LastHeartbeat, double? CpuPercent, double? MemoryPercent,
+    double? GpuPercent = null, double? UptimeSeconds = null, IReadOnlyList<MetricReading>? Temperatures = null,
+    string? LowestSpaceVolume = null, double? LowestSpaceBytes = null, DateTimeOffset? ServerNow = null);
 public sealed record HistoryBucketPoint(DateTimeOffset SampledAt, double? Value, double? Minimum, double? Maximum,
     long ValidSamples, long TotalSamples, double CoverageSeconds, DateTimeOffset? FirstSampleAt,
     DateTimeOffset? LastSampleAt, DateTimeOffset? PeakAt, SampleIdentity? Peak);

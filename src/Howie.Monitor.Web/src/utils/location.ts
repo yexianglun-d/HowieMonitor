@@ -1,9 +1,9 @@
-export const pages = ['overview', 'detail', 'processes', 'history', 'hardware', 'notifications', 'enrollment'] as const
+export const pages = ['computers', 'overview', 'detail', 'processes', 'history', 'hardware', 'notifications', 'enrollment'] as const
 export type Page = typeof pages[number]
 
 export function readLocation(hash: string) {
   const [name, query = ''] = hash.replace(/^#\/?/, '').split('?')
-  return { page: pages.includes(name as Page) ? name as Page : 'overview', query: new URLSearchParams(query) }
+  return { page: pages.includes(name as Page) ? name as Page : 'computers', query: new URLSearchParams(query) }
 }
 
 export function locationHash(page: Page, query: URLSearchParams) {

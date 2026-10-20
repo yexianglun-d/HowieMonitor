@@ -91,6 +91,30 @@ public sealed class MultiComputerTests : IDisposable
         Assert.Equal(60, computers.Single(value => value.DeviceId == second.DeviceId).CpuPercent);
     }
 
+    [Fact] public void OverviewSummariesKeepIdenticalSensorIdsAndStorageValuesOnTheirOwnComputer()
+    {
+        var second = Activate(40);
+        foreach (var credential in new[] { _original, second })
+        {
+            bool first = credential == _original;
+            var sample = Sample(credential.DeviceId, first ? 15 : 75, 1);
+            sample = sample with { UptimeSeconds = first ? 100 : 900, Metrics = [.. sample.Metrics,
+                MetricReading.Present("temp", "sensor/Cpu/0", "CPU Package", first ? 45 : 85, "°C", "test"),
+                MetricReading.Present("gpu", "sensor/GpuNvidia/0", "GPU Core", first ? 5 : 80, "%", "test"),
+                MetricReading.Present("volume.free", "C:", "Free", first ? 5000 : 1000, "B", "test")] };
+            Assert.Null(_store.IngestAuthenticated(Auth(credential), new(false, [sample]), _now).Error);
+        }
+        var summaries = _store.Computers(_now);
+        var a = summaries.Single(value => value.DeviceId == _original.DeviceId);
+        var b = summaries.Single(value => value.DeviceId == second.DeviceId);
+        Assert.Equal(45, Assert.Single(a.Temperatures!).Value); Assert.Equal(85, Assert.Single(b.Temperatures!).Value);
+        Assert.Equal(5, a.GpuPercent); Assert.Equal(80, b.GpuPercent);
+        Assert.Equal(5000, a.LowestSpaceBytes); Assert.Equal(1000, b.LowestSpaceBytes);
+        Assert.Equal(100, a.UptimeSeconds); Assert.Equal(900, b.UptimeSeconds);
+        Assert.All(_store.Computers(_now.AddSeconds(40)), value =>
+        { Assert.Empty(value.Temperatures!); Assert.Null(value.GpuPercent); Assert.Null(value.LowestSpaceBytes); Assert.Null(value.UptimeSeconds); });
+    }
+
     [Fact] public void ExplicitLegacyReplacementDoesNotRevokeOtherComputers()
     {
         var second = Activate(40);

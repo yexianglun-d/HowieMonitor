@@ -17,8 +17,9 @@ public sealed class NotificationWorkerTests : IDisposable
     {
         var notifications = new NotificationStore(_directory, new EphemeralDataProtectionProvider());
         var rule = new AlertRule(Guid.NewGuid().ToString(), "CPU", true, "metric", "cpu.usage", "cpu/total", "%", "above", 90, 4, 70, 4, true);
-        Assert.Null(notifications.Update(new(true, 5, "SCT" + "0123456789abcdefghijklmnopqrstuvwxyz", false, [rule])));
+        Assert.Null(notifications.Update(new(true, 5, "SCT" + "0123456789abcdefghijklmnopqrstuvwxyz", false, [])));
         Assert.Null(notifications.QueueTest(DateTimeOffset.UtcNow, "https://monitor.example"));
+        foreach (string id in new[] { "first", "second" }) Assert.Null(notifications.UpdateComputer(id, new([rule])));
         var telemetry = new TelemetryStore(_directory);
         string session = Guid.NewGuid().ToString();
         foreach (string id in new[] { "first", "second" })
@@ -47,9 +48,9 @@ public sealed class NotificationWorkerTests : IDisposable
             await evaluation.StartAsync(CancellationToken.None);
             await worker.StartAsync(CancellationToken.None);
             await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            await Until(() => notifications.View(DateTimeOffset.UtcNow).Events.Count(item => item.Kind == "trigger") == 2);
+            await Until(() => new[] { "first", "second" }.All(id => notifications.ViewComputer(id).Events.Any(item => item.Kind == "trigger")));
             var view = notifications.View(DateTimeOffset.UtcNow);
-            Assert.All(view.Events.Where(item => item.Kind == "trigger"), item => Assert.Equal("queued", item.Status));
+            Assert.All(new[] { "first", "second" }, id => Assert.Equal("queued", Assert.Single(notifications.ViewComputer(id).Events).Status));
             Assert.Equal("sending", Assert.Single(view.Events, item => item.Kind == "test").Status);
             Assert.Equal(1, handler.Calls); Assert.Equal(1, view.RequestsToday);
             handler.Release.TrySetResult();

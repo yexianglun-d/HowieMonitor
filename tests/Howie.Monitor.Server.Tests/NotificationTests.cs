@@ -27,7 +27,8 @@ public sealed class NotificationTests : IDisposable
     }
     private NotificationStore Store() => new(_directory, _protection);
     private void Configure(NotificationStore store, AlertRule rule, bool enabled = true, int limit = 5)
-        => Assert.Null(store.Update(new(enabled, limit, Key, false, [rule])));
+        { Assert.Null(store.Update(new(enabled, limit, Key, false, []))); Assert.Null(store.UpdateComputer("device", new([rule]))); }
+    private IReadOnlyList<AlertEvent> Events(NotificationStore store) => store.ViewComputer("device").Events.Concat(store.ViewComputer("other").Events).Concat(store.View(_now).Events).ToArray();
     private void Evaluate(NotificationStore store, int seconds, long sequence, double? value = 95, string status = "fresh")
         => store.Evaluate(Device, View(sequence, seconds, value, status), _now.AddSeconds(seconds), _now, PublicUrl);
 
@@ -49,8 +50,8 @@ public sealed class NotificationTests : IDisposable
     {
         var store = Store(); Configure(store, Rule);
         Evaluate(store, 0, 0); Evaluate(store, 2, 1, value, status); Evaluate(store, 4, 2); Evaluate(store, 6, 3);
-        Assert.Empty(store.View(_now).Events);
-        Evaluate(store, 8, 4); Assert.Single(store.View(_now).Events);
+        Assert.Empty(Events(store));
+        Evaluate(store, 8, 4); Assert.Single(Events(store));
     }
 
     [Fact] public void MissingDoesNotRecoverAndGapOrNewSessionRestartsObservation()
@@ -94,21 +95,21 @@ public sealed class NotificationTests : IDisposable
         var dispatch = Assert.IsType<NotificationDispatch>(store.BeginSend(_now.AddSeconds(4)));
         store.Complete(dispatch.Event.Id, new("accepted", "accepted"), _now.AddSeconds(5));
         store = Store(); Evaluate(store, 6, 3); Evaluate(store, 8, 4); Evaluate(store, 10, 5);
-        Assert.Single(store.View(_now).Events); Assert.Null(store.BeginSend(_now.AddMinutes(2)));
+        Assert.Single(Events(store)); Assert.Null(store.BeginSend(_now.AddMinutes(2)));
     }
 
     [Fact] public void RestartDoesNotReusePendingDuration()
     {
         var store = Store(); Configure(store, Rule); Evaluate(store, 0, 0); Evaluate(store, 2, 1); store = Store();
-        Evaluate(store, 4, 2); Evaluate(store, 6, 3); Assert.Empty(store.View(_now).Events);
-        Evaluate(store, 8, 4); Assert.Single(store.View(_now).Events);
+        Evaluate(store, 4, 2); Evaluate(store, 6, 3); Assert.Empty(Events(store));
+        Evaluate(store, 8, 4); Assert.Single(Events(store));
     }
 
     [Fact] public void TurningOffCancelsQueuedTasksButExplicitTestIsAllowed()
     {
         var rule = Rule; var store = Store(); Configure(store, rule); Evaluate(store, 0, 0); Evaluate(store, 2, 1); Evaluate(store, 4, 2);
-        Assert.Null(store.Update(new(false, 5, null, false, [rule])));
-        Assert.Equal("cancelled", Assert.Single(store.View(_now).Events).Status); Assert.Null(store.BeginSend(_now));
+        Assert.Null(store.Update(new(false, 5, null, false, [])));
+        Assert.Equal("cancelled", Assert.Single(Events(store)).Status); Assert.Null(store.BeginSend(_now));
         Assert.Null(store.QueueTest(_now, PublicUrl)); Assert.NotNull(store.BeginSend(_now));
     }
 
@@ -127,24 +128,24 @@ public sealed class NotificationTests : IDisposable
         Assert.True(store.View(_now).Settings.HasCredential);
         Assert.Null(store.QueueTest(_now, PublicUrl));
         store = new(_directory, new EphemeralDataProtectionProvider()); Assert.Null(store.BeginSend(_now));
-        Assert.Equal("failed", Assert.Single(store.View(_now).Events).Status);
-        Assert.DoesNotContain(Key, store.View(_now).Events[0].Detail!);
+        Assert.Equal("failed", Assert.Single(Events(store)).Status);
+        Assert.DoesNotContain(Key, Events(store)[0].Detail!);
     }
 
     [Fact] public void RateLimitExpiryAndRecoveryToggleAreHonored()
     {
         var store = Store(); Configure(store, Rule with { NotifyRecovery = false }); Evaluate(store, 0, 0); Evaluate(store, 2, 1); Evaluate(store, 4, 2);
         var dispatch = Assert.IsType<NotificationDispatch>(store.BeginSend(_now.AddSeconds(4))); store.Complete(dispatch.Event.Id, new("accepted", "ok"), _now.AddSeconds(4));
-        Evaluate(store, 6, 3, 50); Evaluate(store, 8, 4, 50); Evaluate(store, 10, 5, 50); Assert.Single(store.View(_now).Events);
+        Evaluate(store, 6, 3, 50); Evaluate(store, 8, 4, 50); Evaluate(store, 10, 5, 50); Assert.Single(Events(store));
         Assert.Null(store.QueueTest(_now.AddSeconds(11), PublicUrl)); Assert.Null(store.BeginSend(_now.AddSeconds(12)));
-        Assert.Null(store.BeginSend(_now.AddMinutes(11))); Assert.Contains(store.View(_now).Events, item => item.Status == "expired");
+        Assert.Null(store.BeginSend(_now.AddMinutes(11))); Assert.Contains(Events(store), item => item.Status == "expired");
     }
 
     [Fact] public void DeviceChangeAndInvalidRulesCannotReuseEvidence()
     {
         var store = Store(); var rule = Rule; Configure(store, rule); Evaluate(store, 0, 0); Evaluate(store, 2, 1);
         store.Evaluate(Device with { DeviceId = "other" }, View(2, 4) with { DataStatus = "stale" }, _now.AddSeconds(4), _now, PublicUrl);
-        Assert.Empty(store.View(_now).Events);
+        Assert.Empty(Events(store));
         Assert.NotNull(store.Update(new(true, 5, "sctp-invalid", false, [rule])));
         Assert.NotNull(store.Update(new(true, 5, null, false, [rule, rule])));
         Assert.NotNull(store.Update(new(true, 5, null, false, [rule with { RecoveryThreshold = 95 }])));
@@ -152,7 +153,7 @@ public sealed class NotificationTests : IDisposable
 
     [Fact] public void InterleavedComputersKeepIndependentContinuityAndQueuedEvents()
     {
-        var store = Store(); Configure(store, Rule);
+        var store = Store(); var rule = Rule; Configure(store, rule); Assert.Null(store.UpdateComputer("other", new([rule])));
         for (int sequence = 0; sequence <= 2; sequence++)
         {
             int seconds = sequence * 2;
@@ -161,11 +162,11 @@ public sealed class NotificationTests : IDisposable
             store.Evaluate(Device with { DeviceId = "other", Name = "second-computer" },
                 other with { Sample = other.Sample! with { DeviceId = "other" } }, _now.AddSeconds(seconds), _now, PublicUrl);
         }
-        var events = store.View(_now).Events;
+        var events = Events(store);
         Assert.Equal(2, events.Count); Assert.All(events, item => Assert.Equal("queued", item.Status));
         Assert.Contains(events, item => item.Description.Contains("second-computer", StringComparison.Ordinal));
         Assert.Contains(events, item => item.Description.Contains("电脑：computer\n", StringComparison.Ordinal));
-        store = Store(); Assert.Equal(2, store.View(_now).Events.Count);
+        store = Store(); Assert.Equal(2, Events(store).Count);
         Assert.NotNull(store.BeginSend(_now.AddSeconds(5))); Assert.Null(store.BeginSend(_now.AddSeconds(6)));
     }
 
@@ -174,14 +175,14 @@ public sealed class NotificationTests : IDisposable
         var store = Store(); Configure(store, Rule); Evaluate(store, 0, 0); Evaluate(store, 2, 1);
         var other = View(2, 4);
         store.Evaluate(Device with { DeviceId = "other" }, other with { Sample = other.Sample! with { DeviceId = "other" } }, _now.AddSeconds(4), _now, PublicUrl);
-        Assert.Empty(store.View(_now).Events);
-        Evaluate(store, 4, 2); Assert.Single(store.View(_now).Events);
+        Assert.Empty(Events(store));
+        Evaluate(store, 4, 2); Assert.Single(Events(store));
         for (int sequence = 3; sequence <= 5; sequence++)
         {
             var low = View(sequence, sequence * 2, 50);
             store.Evaluate(Device with { DeviceId = "other" }, low with { Sample = low.Sample! with { DeviceId = "other" } }, _now.AddSeconds(sequence * 2), _now, PublicUrl);
         }
-        Assert.Single(store.View(_now).Events);
+        Assert.Single(Events(store));
     }
 
     [Theory] [InlineData("{\"code\":0}", "accepted")] [InlineData("{\"code\":40001}", "failed")]
@@ -225,7 +226,7 @@ public sealed class NotificationTests : IDisposable
         string temp = Path.Combine(_directory, "notifications.json.tmp");
         using (var blocked = new FileStream(temp, FileMode.Create, FileAccess.ReadWrite, FileShare.None))
             Assert.Throws<IOException>(() => store.BeginSend(_now));
-        Assert.Equal(0, store.View(_now).RequestsToday); Assert.Equal("queued", Assert.Single(store.View(_now).Events).Status);
+        Assert.Equal(0, store.View(_now).RequestsToday); Assert.Equal("queued", Assert.Single(Events(store)).Status);
         Assert.NotNull(store.BeginSend(_now));
     }
     [Fact] public void FailedSettingsSaveDoesNotEnableNotificationsInMemory()
@@ -233,7 +234,7 @@ public sealed class NotificationTests : IDisposable
         var store = Store(); Configure(store, Rule, false);
         string temp = Path.Combine(_directory, "notifications.json.tmp");
         using (var blocked = new FileStream(temp, FileMode.Create, FileAccess.ReadWrite, FileShare.None))
-            Assert.Throws<IOException>(() => store.Update(new(true, 5, null, false, [Rule])));
+            Assert.Throws<IOException>(() => store.Update(new(true, 5, null, false, [])));
         Assert.False(store.View(_now).Settings.Enabled); Assert.False(Store().View(_now).Settings.Enabled);
     }
     public void Dispose() { if (Directory.Exists(_directory)) Directory.Delete(_directory, true); }

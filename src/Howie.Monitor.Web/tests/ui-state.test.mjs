@@ -37,11 +37,10 @@ async function notificationHarness(overrides = {}) {
 
 test('notification draft and transient key survive page deactivation and refresh, and are cleared on logout disposal', async () => {
   const h = await notificationHarness()
-  h.state.settings.value.dailyLimit = 9; h.state.settings.value.rules.push({ ...rule }); h.state.sendKey.value = 'unsaved-secret'
+  h.state.settings.value.dailyLimit = 9; h.state.sendKey.value = 'unsaved-secret'
   assert.equal(h.state.dirty.value, true)
   h.lifecycle.deactivate(); h.lifecycle.activate(); await tick(); await h.state.refresh()
   assert.equal(h.state.settings.value.dailyLimit, 9)
-  assert.equal(h.state.settings.value.rules[0].threshold, 10 * 1024 ** 3)
   assert.equal(h.state.sendKey.value, 'unsaved-secret')
   let warned = false
   h.listeners.get('beforeunload')({ preventDefault() { warned = true }, returnValue: undefined })
@@ -51,13 +50,12 @@ test('notification draft and transient key survive page deactivation and refresh
   assert.equal(h.listeners.size, 0)
 })
 
-test('saving sends original byte units and resets the saved-state indicator', async () => {
+test('saving the global channel never includes computer rules and resets the saved-state indicator', async () => {
   const h = await notificationHarness()
   try {
     h.state.settings.value.rules.push({ ...rule }); h.state.settings.value.dailyLimit = 7
     await h.state.save()
-    assert.equal(h.payload().rules[0].unit, 'B')
-    assert.equal(h.payload().rules[0].threshold, 10737418240)
+    assert.equal(h.payload().rules.length, 0)
     assert.equal(h.state.dirty.value, false)
     assert.deepEqual(h.feedback, [{ kind: 'success', message: '通知设置已保存' }])
     let warned = false
@@ -139,7 +137,8 @@ test('page and historical query links round-trip encoded device and metric ident
   assert.equal(result.query.get('computer'), 'desk&one')
   assert.equal(result.query.get('metric'), JSON.stringify(['C:', 'volume.free', 'B']))
   assert.equal(result.query.get('hours'), '168')
-  assert.equal(location.readLocation('#unknown').page, 'overview')
+  assert.equal(location.readLocation('#unknown').page, 'computers')
+  assert.equal(location.readLocation('').page, 'computers')
 })
 
 test('chart keeps missing samples disconnected and uses rate axes for byte-per-second metrics', async () => {

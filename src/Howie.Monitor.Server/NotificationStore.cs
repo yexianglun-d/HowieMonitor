@@ -10,6 +10,8 @@ public sealed class NotificationData
     public int DailyLimit { get; set; } = 5;
     public string? ProtectedKey { get; set; }
     public List<AlertRule> Rules { get; set; } = [];
+    public bool ComputerRulesMigrated { get; set; }
+    public Dictionary<string, List<AlertRule>> ComputerRules { get; set; } = [];
     public Dictionary<string, AlertRuleState> States { get; set; } = [];
     public List<AlertEvent> Events { get; set; } = [];
     public string BudgetDate { get; set; } = "";
@@ -25,7 +27,7 @@ public sealed class NotificationStore
     private readonly string _path;
     private readonly IDataProtector _protector;
     private NotificationData _data;
-    public NotificationStore(string directory, IDataProtectionProvider protection)
+    public NotificationStore(string directory, IDataProtectionProvider protection, IReadOnlyCollection<string>? computerIds = null)
     {
         Directory.CreateDirectory(directory);
         _path = Path.Combine(directory, "notifications.json");
@@ -42,6 +44,15 @@ public sealed class NotificationStore
             }
             _data.DeviceId = null;
         }
+        if (!_data.ComputerRulesMigrated)
+        {
+            // 旧规则曾作用于所有已接入电脑；只迁移一次，后续新电脑默认无规则。
+            foreach (string id in computerIds ?? []) _data.ComputerRules[id] = _data.Rules.ToList();
+            _data.Rules.Clear(); _data.ComputerRulesMigrated = true;
+            for (int i = 0; i < _data.Events.Count; i++)
+                if (_data.Events[i] is { Kind: not "test", Status: "queued", ComputerId: null })
+                    _data.Events[i] = _data.Events[i] with { Status = "cancelled", Detail = "旧任务没有电脑归属，迁移后重新观察规则。" };
+        }
         foreach (var state in _data.States.Values) { state.Since = null; state.LastSampledAt = null; }
         Save();
     }
@@ -52,7 +63,33 @@ public sealed class NotificationStore
         {
             string day = Day(now);
             return new(new(_data.Enabled, _data.DailyLimit, _data.ProtectedKey is not null, _data.Rules.ToArray()),
-                _data.Events.OrderByDescending(value => value.CreatedAt).ToArray(), day == _data.BudgetDate ? _data.RequestsToday : 0, day);
+                _data.Events.Where(value => value.ComputerId is null).OrderByDescending(value => value.CreatedAt).ToArray(), day == _data.BudgetDate ? _data.RequestsToday : 0, day);
+        }
+    }
+
+    public ComputerNotificationView ViewComputer(string computerId)
+    {
+        lock (_gate)
+            return new(computerId, _data.ComputerRules.GetValueOrDefault(computerId)?.ToArray() ?? [],
+                _data.Events.Where(value => value.ComputerId == computerId).OrderByDescending(value => value.CreatedAt).ToArray());
+    }
+
+    public string? UpdateComputer(string computerId, ComputerNotificationUpdate update)
+    {
+        if (string.IsNullOrWhiteSpace(computerId)) return "请选择电脑。";
+        string? error = AlertRules.ValidateRules(update.Rules);
+        if (error is not null) return error;
+        lock (_gate)
+        {
+            var previous = _data;
+            _data = JsonSerializer.Deserialize<NotificationData>(JsonSerializer.Serialize(_data, ProtocolJson.Options), ProtocolJson.Options)!;
+            foreach (var rule in _data.ComputerRules.GetValueOrDefault(computerId) ?? [])
+                _data.States.Remove(StateKey(computerId, rule.Id));
+            _data.ComputerRules[computerId] = update.Rules!.ToList();
+            CancelQueued("这台电脑的规则已更新，待发送任务取消。", computerId);
+            try { Save(); }
+            catch (IOException) { _data = previous; throw; }
+            return null;
         }
     }
 
@@ -60,6 +97,7 @@ public sealed class NotificationStore
     {
         string? error = AlertRules.Validate(update);
         if (error is not null) return error;
+        if (update.Rules!.Count != 0) return "提醒规则需在对应电脑下单独保存，请刷新页面。";
         lock (_gate)
         {
             if (update.Enabled && (update.ClearCredential || (_data.ProtectedKey is null && update.SendKey is null)))
@@ -68,8 +106,8 @@ public sealed class NotificationStore
             var previous = _data;
             _data = JsonSerializer.Deserialize<NotificationData>(JsonSerializer.Serialize(_data, ProtocolJson.Options), ProtocolJson.Options)!;
             _data.Enabled = update.Enabled; _data.DailyLimit = update.DailyLimit; _data.ProtectedKey = key;
-            _data.Rules = update.Rules!.ToList(); _data.States.Clear();
-            CancelQueued("设置已更新，待发送任务取消。");
+            _data.States.Clear();
+            CancelQueued("全局发送设置已更新，待发送任务取消。");
             try { Save(); }
             catch (IOException) { _data = previous; throw; }
             return null;
@@ -95,9 +133,10 @@ public sealed class NotificationStore
         lock (_gate)
         {
             if (device is null || !_data.Enabled) return;
+            if (view.Sample is { } sample && sample.DeviceId != device.DeviceId) return;
             bool changed = false;
             // 同一规则在每台电脑分别连续观察；遍历另一台不能清空状态或取消通知。
-            foreach (var rule in _data.Rules.Where(value => value.Enabled))
+            foreach (var rule in (_data.ComputerRules.GetValueOrDefault(device.DeviceId) ?? []).Where(value => value.Enabled))
             {
                 string stateKey = StateKey(device.DeviceId, rule.Id);
                 if (!_data.States.TryGetValue(stateKey, out var state)) _data.States[stateKey] = state = new();
@@ -108,7 +147,7 @@ public sealed class NotificationStore
                     : $"{rule.Name} { (rule.Comparison == "above" ? "≥" : "≤") } {rule.Threshold} {rule.Unit}，持续 {rule.DurationSeconds} 秒";
                 string title = transition == "recovery" ? "监控提醒恢复" : "监控条件触发";
                 AddEvent(new(Guid.NewGuid().ToString(), rule.Id, transition, $"Howie Monitor · {title}",
-                    $"电脑：{device.Name}\n\n项目：{rule.Name}\n\n状态：{(transition == "recovery" ? "连续有效数据已满足恢复条件" : condition)}\n\n时间：{now.ToOffset(TimeSpan.FromHours(8)):yyyy-MM-dd HH:mm:ss zzz}\n\n[打开私人监控面板]({publicUrl})", now, "queued"));
+                    $"电脑：{device.Name}\n\n项目：{rule.Name}\n\n状态：{(transition == "recovery" ? "连续有效数据已满足恢复条件" : condition)}\n\n时间：{now.ToOffset(TimeSpan.FromHours(8)):yyyy-MM-dd HH:mm:ss zzz}\n\n[打开这台电脑]({publicUrl.TrimEnd('/')}/#overview?computer={Uri.EscapeDataString(device.DeviceId)})", now, "queued", ComputerId: device.DeviceId));
             }
             int count = _data.Events.Count;
             Prune(now);
@@ -130,7 +169,8 @@ public sealed class NotificationStore
             {
                 var item = _data.Events[i];
                 if (item.Status != "queued") continue;
-                if (_data.ProtectedKey is null || (item.Kind != "test" && (!_data.Enabled || !_data.Rules.Any(value => value.Id == item.RuleId && value.Enabled))))
+                var rules = item.ComputerId is null ? [] : _data.ComputerRules.GetValueOrDefault(item.ComputerId) ?? [];
+                if (_data.ProtectedKey is null || (item.Kind != "test" && (!_data.Enabled || !rules.Any(value => value.Id == item.RuleId && value.Enabled))))
                 { _data.Events[i] = item with { Status = "cancelled", Detail = "通知或对应规则已关闭。" }; continue; }
                 if (now - item.CreatedAt > TimeSpan.FromMinutes(10))
                 { _data.Events[i] = item with { Status = "expired", Detail = "等待发送超过 10 分钟，未发送过时提醒。" }; continue; }
@@ -164,12 +204,18 @@ public sealed class NotificationStore
     }
     private static string StateKey(string deviceId, string ruleId) => JsonSerializer.Serialize(new[] { deviceId, ruleId });
 
-    private void CancelQueued(string reason)
+    private void CancelQueued(string reason, string? computerId = null)
     {
         for (int i = 0; i < _data.Events.Count; i++)
-            if (_data.Events[i].Status == "queued") _data.Events[i] = _data.Events[i] with { Status = "cancelled", Detail = reason };
+            if (_data.Events[i].Status == "queued" && (computerId is null || _data.Events[i].ComputerId == computerId))
+                _data.Events[i] = _data.Events[i] with { Status = "cancelled", Detail = reason };
     }
-    private void AddEvent(AlertEvent item) { _data.Events.Add(item); if (_data.Events.Count > 100) _data.Events.RemoveAt(0); }
+    private void AddEvent(AlertEvent item)
+    {
+        _data.Events.Add(item);
+        var own = _data.Events.Where(value => value.ComputerId == item.ComputerId).OrderBy(value => value.CreatedAt).ToArray();
+        if (own.Length > 100 && own.FirstOrDefault(value => value.Status != "sending") is { } oldest) _data.Events.Remove(oldest);
+    }
     private void Prune(DateTimeOffset now) => _data.Events.RemoveAll(value => value.CreatedAt < now.AddDays(-7) && value.Status != "sending");
     private static string Day(DateTimeOffset now) => now.ToOffset(TimeSpan.FromHours(8)).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
     private void ResetBudget(DateTimeOffset now) { string day = Day(now); if (_data.BudgetDate != day) { _data.BudgetDate = day; _data.RequestsToday = 0; } }
