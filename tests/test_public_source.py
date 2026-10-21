@@ -30,11 +30,17 @@ class PublicSourceTests(unittest.TestCase):
         private = self.root / 'src' / 'obj'
         private.mkdir()
         (private / 'agent.json').write_text('private', encoding='utf-8')
+        (self.root / 'docs' / 'internal-operations.md').write_text('private', encoding='utf-8')
+        journal = self.root / 'docs' / 'project-memory'
+        journal.mkdir()
+        (journal / '00-current-status.md').write_text('private deployment state', encoding='utf-8')
         files = EXPORTER.collect(self.root)
         self.assertEqual(files['README.md'].decode().splitlines(), ['public'])
         self.assertIn('src/App.cs', files)
         self.assertIn('docs/terminal-acceptance.md', files)
-        self.assertFalse(any('/obj/' in path or path.startswith('docs/') and path != 'docs/terminal-acceptance.md' for path in files))
+        self.assertEqual({path for path in files if path.startswith('docs/')},
+                         {'docs/terminal-acceptance.md', 'docs/agent-updates.md'})
+        self.assertFalse(any('/obj/' in path for path in files))
 
     def test_runtime_json_in_source_is_rejected(self):
         (self.root / 'src' / 'agent.json').write_text('{}', encoding='utf-8')
