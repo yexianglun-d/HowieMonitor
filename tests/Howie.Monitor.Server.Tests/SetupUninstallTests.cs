@@ -149,6 +149,15 @@ public sealed class SetupUninstallTests
     }
 
     [Fact]
+    public void SystemQueueSupportsReadOnlyInspectionForAnUnqueuedTemporaryPath()
+    {
+        using var fixture = new Fixture();
+        // 本例不登记任何开机任务。唯一临时路径不可能匹配系统已有项，生产方法不会写入或提交。
+        PendingFileDeletes.RemoveOwnedDeletes(fixture.Paths.ProgramRoot);
+        Assert.True(File.Exists(fixture.Unrelated));
+    }
+
+    [Fact]
     public async Task StageCleanupWaitsForItsParentAndOnlyRemovesTheUniqueStage()
     {
         using var fixture = new Fixture();
