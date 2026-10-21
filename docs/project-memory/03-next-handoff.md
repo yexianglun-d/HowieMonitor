@@ -2,14 +2,16 @@
 
 ## 下次继续
 
-- 最新进展：用户要求“部署以及提交”，功能提交 `89c8a92` 已推送 `main`，纯 Linux 发布包已准备并上传到 `/opt/howie-monitor/staging/deploy-agent-updates-20261021/`，源提交/摘要见 current-status，生产没有切换。
-- 正在等待用户对异步问题的答复：是否允许现有 Windows 发布 workflow 的 .NET/Python/前端及安装器检查、隔离备份恢复/升级 API 和部署后只读检查。未答复前不能 dispatch workflow、运行 smoke/backup 恢复校验或实际功能检查；一般部署请求不包含此测试授权。若允许，可继续本次部署，无需重复确认部署本身。不要执行真实 Windows 升级、终端命令或通知发送。
-- GitHub HTTPS 网页域名直连超时，使用系统已配置代理 `git -c http.proxy=http://127.0.0.1:7897 ...` 同步成功；GitHub API 及 keyring 登录可用。服务器 IP/root/22 的既有密码认证可用，当前线上 `/opt/howie-monitor/releases/20261021-76c6362`，容器/镜像及 2 台电脑状态与先前记录一致。不存在新版安装器清单。准备工作中未修改生产配置、下载包或启动隔离测试。
+- 最新发布：2026-10-21 18:14（北京时间）已完成部署及代码推送；应用与 Windows `0.2.0` 均为 `b301a0c873e04685ba2580a238034caf61eb0cb2`。线上 `/opt/howie-monitor/current` 指向 `/opt/howie-monitor/releases/20261021-b301a0c`。发布记录后续提交仅改项目日志，不代表另有应用构建。
+- 用户已明确允许本次 Windows 发布测试、隔离恢复/升级 API、部署后只读检查。Actions `39580539389`、隔离任务/回退协议/电脑隔离/终端互斥/重启删除、恢复副本启动、公网 5 项资源/8 项鉴权及完整安装包摘要均通过。没有自动升级真实电脑、执行终端命令或发送通知；一般新需求仍遵守用户 AGENTS 的测试授权边界，不沿用本轮授权扩大范围。
+- EXE 与 `.release.json` 同步发布，SHA-256 `995d13c9dd34252eba67b8b75373337721a166951b1032767fdd46e3bbdba4d2`、94,002,291 字节、未签名。新备份 `/opt/howie-monitor/backups/monitor-20261021-100506.tar.gz`（SHA-256 `bb6f06552429b81fc6c688c8c9689cf6c85823c90b296a6512b96bffe2675409`）已恢复验证；上一应用目录 `20261021-76c6362` 保留，旧 EXE 位于当前 staging 的 `pre-switch/HowieMonitorSetup.exe`，回退时注意旧包原本没有 release.json，不要遗留新版清单。证据 `.local/deploy-agent-updates-20261021/`，数据与凭据只在服务器。隔离容器和恢复/合成数据已清理。
+- 下一步若用户要启用升级，先在目标 Windows 本机运行新 CLI/GUI 修复并独立开启“允许面板升级”。首个 `0.2.0` 只建立升级能力，之后必须发布更高版本（如 `0.2.1`）才能远程升级，不做同版本构建覆盖。真实服务升级/回退与管理员终端仍未实机验收；当前两台电脑无新鲜上报，不能把协议模拟或服务健康当成真实硬件已连通。
+- 实现入口：前端 `AgentUpdateDialog.vue` / `ComputersView.vue`，服务端 `TelemetryUpdates.cs` / `AgentUpdateEndpoints.cs`，Windows `UpdateWorker.cs` / `SetupUpdater.cs` / `InstallEngine.cs`，协议 Contracts `AgentUpdates.cs` / `AgentUpdateFiles.cs`。独立本机 opt-in、密码/CSRF、当前会话/摘要固定、电脑隔离和终端互斥保持不变；产品维护使用 SYSTEM，不改变用户终端账号。无独立开机恢复任务，断电且服务无法启动时需要本机修复；协议 1 不支持不兼容本地格式迁移。
+- GitHub 网页域名直连超时时可沿用系统现有代理 `git -c http.proxy=http://127.0.0.1:7897 ...`；GitHub API/keyring 可用，不更改全局代理设置。SSH 使用本轮独立复用连接，完成后关闭，不持久化密码。
 
-- 优先处理本轮未发布的 `0.2.0` 版本识别/受控升级：所有改动在工作区，尚未提交推送，线上没有更新。入口 `ComputersView.vue` / `AgentUpdateDialog.vue`；后台 `TelemetryUpdates.cs` / `AgentUpdateEndpoints.cs`；Windows `UpdateWorker.cs` / `SetupUpdater.cs` / `InstallEngine.cs`；协议在 Contracts `AgentUpdates.cs` / `AgentUpdateFiles.cs`。完整约定见 `docs/agent-updates.md`。
-- 本轮仅生产项目编译和前端构建通过，未运行任何测试/浏览器/API/实机功能验证，发布/签名/清单流程也未运行。新增 `AgentUpdateTests.cs`、更新 `SetupCliTests.cs` 的独立升级授权输入与断言，测试项目本轮未单独编译。**遵守用户新 AGENTS：一般实现不授权测试；发布脚本与 Windows workflow 含测试，必须取得相应授权后才可运行，不以旧会话测试授权代替。** 没有为绕过规则改掉原有测试步骤。
-- 旧 Agent 不支持自升级，需先发布新版并让用户在本地修复一次，明确选择“允许面板升级”。此后仅更高版本可从面板升级，不能拿首个 0.2.0 同版本构建互相覆盖。发布须同次 EXE + `.release.json`，签名后必须重新计算清单；缺清单时手动下载保留但远程升级不可用。当前 development 编译不能接受远程任务。
-- 已实现：任务按电脑保存、会话与包摘要固定、默认关闭的本机授权、密码/CSRF/激活凭据、终端互斥、无 GUI 的 SYSTEM 产品维护、原配置/身份/队列/授权保留、真实新会话/心跳/CPU/内存确认、失败恢复及本地修复回执。进程中断后的恢复依赖采集服务能够再启动；服务也无法启动或断电中断可能仍需本机修复，不宣称完成任意断电回退。先静态复核/获得授权做隔离及实机验收，再选择发布；不要直接操作生产电脑测试。
+## 旧版交接记录（历史）
+
+以下保留各轮当时的版本与待办，遇到冲突以上述最新发布状态为准。
 
 - 当前应用为 `76c6362`，2026-10-21 11:55（北京时间）已上线单命令下载安装入口及接入页复制按钮；下载 EXE 仍为 `c67e088` / `fbea3549…ac38fc5`（93,950,267 字节），不要把应用和安装包当成同一源码版本。公开分发端点只返回脚本/软件，原受保护下载 API 仍需登录。
 - Windows 验证 `39540650446` 对应 `167f9f2`，236 项 .NET、20 项 Python及完整发布通过；与应用 `76c6362` 相比只调整测试/清单，运行代码及文档无差异。原生 5.1 子进程需使用自身 PSModulePath；冷启动进度可能在错误流中使用 CLIXML，测试只接受 progress 记录，错误/警告仍失败。没有真实安装 Windows 服务或开启终端权限。
