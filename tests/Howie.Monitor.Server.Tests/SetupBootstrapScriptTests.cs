@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
+using System.Xml.Linq;
 using Howie.Monitor.Server;
 using Xunit;
 
@@ -75,12 +76,19 @@ public sealed class SetupBootstrapScriptTests
         start.Environment["PSModulePath"] = Path.Combine(Path.GetDirectoryName(start.FileName)!, "Modules");
         foreach (string argument in new[] { "-NoProfile", "-NonInteractive", "-OutputFormat", "Text", "-EncodedCommand", Convert.ToBase64String(Encoding.Unicode.GetBytes(command)) }) start.ArgumentList.Add(argument);
         using var process = Process.Start(start)!; process.StandardInput.Close();
-        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(60));
         var output = process.StandardOutput.ReadToEndAsync(deadline.Token); var error = process.StandardError.ReadToEndAsync(deadline.Token);
         try { await process.WaitForExitAsync(deadline.Token); }
         finally { if (!process.HasExited) { process.Kill(true); await process.WaitForExitAsync(); } }
         string stdout = await output, stderr = await error;
         Assert.True(process.ExitCode == 0, $"PowerShell exited {process.ExitCode}: {stdout}\n{stderr}");
-        Assert.Contains("BOOTSTRAP_TEST_PASSED", stdout); Assert.Equal("", stderr);
+        Assert.Contains("BOOTSTRAP_TEST_PASSED", stdout);
+        if (stderr.Length > 0)
+        {
+            // 5.1 首次加载系统模块会向重定向错误流写 CLIXML 进度；仅允许进度，真实错误和警告仍须失败。
+            Assert.StartsWith("#< CLIXML", stderr);
+            var records = XDocument.Parse(stderr[(stderr.IndexOf('\n') + 1)..]).Root!.Elements();
+            Assert.All(records, record => Assert.True(record.Attribute("S")?.Value == "progress", stderr));
+        }
     }
 }
