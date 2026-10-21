@@ -132,6 +132,12 @@ public static class InstallEngine
         }
         catch (InvalidOperationException ex) when (ex.InnerException is System.ComponentModel.Win32Exception { NativeErrorCode: 1060 }) { }
     }
+    internal static bool IsServiceRunning()
+    {
+        using var service = new ServiceController(SetupPaths.ServiceName);
+        try { return service.Status == ServiceControllerStatus.Running; }
+        catch (InvalidOperationException ex) when (ex.InnerException is System.ComponentModel.Win32Exception { NativeErrorCode: 1060 }) { return false; }
+    }
     public static async Task Uninstall(bool removeData, CancellationToken cancellationToken)
     {
         if (!SetupPaths.IsAdministrator) throw new InvalidOperationException("卸载需要管理员授权。");

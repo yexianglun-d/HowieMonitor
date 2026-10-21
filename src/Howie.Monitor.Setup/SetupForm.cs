@@ -40,7 +40,7 @@ public sealed class SetupForm : Form
     protected override bool ShowWithoutActivation => PreviewOnly;
     private static readonly Color BackgroundColor = Color.FromArgb(16, 19, 19), PanelColor = Color.FromArgb(24, 28, 28), Accent = Color.FromArgb(154, 219, 201);
 
-    public SetupForm(bool uninstall) : this(uninstall, new SetupClient(), Program.RunElevated, IsServiceRunning, SetupPaths.WorkRoot) { }
+    public SetupForm(bool uninstall) : this(uninstall, new SetupClient(), Program.RunElevated, InstallEngine.IsServiceRunning, SetupPaths.WorkRoot) { }
     internal SetupForm(bool uninstall, SetupClient client, Func<InstallPlan, CancellationToken, Task> install, Func<bool> serviceRunning, string workRoot, Action<string>? open = null, Func<bool, CancellationToken, Task>? remove = null)
     {
         _uninstall = uninstall; _client = client; _install = install; _serviceRunning = serviceRunning; _workRoot = workRoot; _open = open ?? Open; _remove = remove ?? RemoveInstalled;
@@ -410,12 +410,6 @@ public sealed class SetupForm : Form
         }
         throw new InvalidOperationException("本次检测已结束，尚未收到完整的实时数据。请按上方未通过项检查网络和系统时间，再点“重新检测”；服务异常可点“上一步”修复，授权失效可点“重新绑定”。");
     }
-    private static bool IsServiceRunning()
-    {
-        using var service = new System.ServiceProcess.ServiceController(SetupPaths.ServiceName);
-        try { return service.Status == System.ServiceProcess.ServiceControllerStatus.Running; }
-        catch (InvalidOperationException ex) when (ex.InnerException is System.ComponentModel.Win32Exception { NativeErrorCode: 1060 }) { return false; }
-    }
     private void ShowUninstallStep(int step)
     {
         switch (step)
@@ -456,6 +450,4 @@ public sealed class SetupForm : Form
         if (process.ExitCode != 0) throw new InvalidOperationException("卸载未完成，请查看提示后重试。");
     }
     private static void Open(string address) => Process.Start(new ProcessStartInfo(address) { UseShellExecute = true });
-    private sealed record SetupUiState(string ComputerName, InstallPlan Plan, string? PreviousComputer, DateTimeOffset? ExpiresAt = null);
-    private sealed record ClaimAttempt(string ComputerName, string CodeHash, string RequestId);
 }

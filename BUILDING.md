@@ -14,6 +14,20 @@ The publisher installs browser dependencies with `npm ci`, performs strict Vue t
 
 `-PublicRelease` includes only these public instructions, the privacy/signing policies and the project license instead of private deployment acceptance records. An unsigned local build stays unsigned. Read [CODE_SIGNING.md](CODE_SIGNING.md) before requesting a signature.
 
+## Interactive CLI installation
+
+The setup source supports `--cli` in addition to the default graphical wizard. Use a package built from this source; older installers do not recognize this mode. On the target Windows 11 x64 computer, open PowerShell as the administrator account that should own the installation, then run:
+
+```powershell
+Start-Process -FilePath .\HowieMonitorSetup.exe -ArgumentList '--cli' -NoNewWindow -Wait
+```
+
+The installer prompts for a dashboard pairing code, optional administrator terminal access, and explicit confirmation of installation and data upload. First-time terminal access defaults to off; repair preserves the existing authorization only for the same installing account. No Windows password is requested or saved. The package contains its runtime and needs no Node.js or Python installation.
+
+The CLI uses the same service installer and enrollment protocol as the GUI. It can repair an existing registered service and resume a saved GUI/CLI enrollment request without consuming the pairing code twice. A successful exit requires a running service, matching computer identity, fresh telemetry, and confirmed server activation. A timeout leaves the installation request available for retry and does not claim success. If the previous uninstall is awaiting reboot, restart Windows first; the CLI does not delete the pending-cleanup marker.
+
+Use `--help` or `--cli --help` for help. Exit codes are 0 for verified enrollment, 1 for an installation or verification error, 2 for declined confirmation or invalid CLI arguments, and 130 for cancellation/end of input. In scripts, add `-PassThru` to `Start-Process` and read the returned process's `ExitCode`. This is an interactive mode, not unattended deployment. Keep pairing codes out of command arguments and logs. PowerShell's documented [`-Wait` and `-NoNewWindow`](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.management/start-process) options keep this Windows GUI-subsystem executable attached to the calling console while waiting for completion.
+
 ## Local development
 
 `scripts/start-local.ps1` creates a private instance below `.local/`; follow its interactive setup prompts. `scripts/stop-local.ps1` stops only processes belonging to the selected instance. Never commit that directory, runtime configuration, queues or databases.

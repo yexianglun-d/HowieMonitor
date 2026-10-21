@@ -142,6 +142,22 @@ try {
     $taskCheckError.GetAwaiter().GetResult() | Out-Null
     $taskCheckProcess.Dispose()
     if ($taskCheckResult.runtime -ne '10.0.12' -or $taskCheckResult.agentSha256 -ne $taskAgentHash) { throw '安装包运行时或采集载荷不一致。' }
+    $taskCheckStart.ArgumentList.Clear()
+    $taskCheckStart.ArgumentList.Add('--cli')
+    $taskCheckStart.ArgumentList.Add('--help')
+    $taskCheckStart.RedirectStandardInput = $true
+    $taskCheckStart.StandardOutputEncoding = [Text.UTF8Encoding]::new($false)
+    $taskCheckStart.StandardErrorEncoding = [Text.UTF8Encoding]::new($false)
+    $taskCliProcess = [Diagnostics.Process]::Start($taskCheckStart)
+    try {
+        $taskCliProcess.StandardInput.Close()
+        $taskCliOutput = $taskCliProcess.StandardOutput.ReadToEndAsync()
+        $taskCliError = $taskCliProcess.StandardError.ReadToEndAsync()
+        if (-not $taskCliProcess.WaitForExit(15000)) { $taskCliProcess.Kill($true); throw 'CLI 帮助入口检查超时。' }
+        if ($taskCliProcess.ExitCode -ne 0 -or $taskCliOutput.GetAwaiter().GetResult() -notmatch '交互式 CLI 安装' -or $taskCliError.GetAwaiter().GetResult()) {
+            throw 'CLI 控制台入口检查失败。'
+        }
+    } finally { $taskCliProcess.Dispose() }
     $taskSetupHash = (Get-FileHash -LiteralPath $taskSetupExe -Algorithm SHA256).Hash
     [IO.File]::WriteAllText(($taskSetupExe + '.sha256'), ($taskSetupHash + '  HowieMonitorSetup.exe'), [Text.UTF8Encoding]::new($false))
     [pscustomobject]@{ Platform = 'Windows Setup'; Directory = $taskSetupDirectory; Archive = $taskSetupExe; Sha256 = $taskSetupHash; Verification = $taskCheckResult }

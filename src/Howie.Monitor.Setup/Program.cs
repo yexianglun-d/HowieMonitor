@@ -9,6 +9,10 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Contains("--cli", StringComparer.Ordinal) || args is ["--help"])
+        {
+            RunCli(args); return;
+        }
         ApplicationConfiguration.Initialize();
         if (args is ["--check-package"])
         {
@@ -53,6 +57,29 @@ internal static class Program
         }
 #endif
         Application.Run(form);
+    }
+    private static void RunCli(string[] args)
+    {
+        try
+        {
+            SetupConsole.Attach();
+            if (args is ["--help"] or ["--cli", "--help"]) { SetupCli.Help(Console.Out); return; }
+            if (args is not ["--cli"]) { SetupCli.Help(Console.Error); Environment.ExitCode = 2; return; }
+            using var mutex = new Mutex(true, "Local\\HowieMonitorSetup", out bool unique);
+            if (!unique) { Console.Error.WriteLine("安装或卸载向导已在运行，请先关闭已有窗口。"); Environment.ExitCode = 1; return; }
+            using var cancellation = new CancellationTokenSource();
+            ConsoleCancelEventHandler cancel = (_, e) => { e.Cancel = true; cancellation.Cancel(); };
+            Console.CancelKeyPress += cancel;
+            try
+            {
+                using var client = new SetupClient();
+                var cli = new SetupCli(client, Console.In, Console.Out, SetupPaths.WorkRoot, SetupPaths.CurrentSid);
+                Environment.ExitCode = cli.Run(cancellation.Token).GetAwaiter().GetResult();
+            }
+            finally { Console.CancelKeyPress -= cancel; }
+        }
+        catch (Exception ex)
+        { Console.Error.WriteLine("CLI 未能启动（" + ex.GetType().Name + "）。请从管理员 PowerShell 运行。"); Environment.ExitCode = 1; }
     }
     public static async Task RunElevated(InstallPlan plan, CancellationToken cancellationToken)
     {
