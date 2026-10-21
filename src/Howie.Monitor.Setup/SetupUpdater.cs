@@ -50,7 +50,7 @@ internal static class SetupUpdater
             if (!recover)
             {
                 if (journal.Phase != "staged" || journal.Ticket.ExpiresAt <= DateTimeOffset.UtcNow) throw new InvalidOperationException("升级任务已过期或状态不正确。");
-                var marker = InstallEngine.Existing() ?? throw new InvalidOperationException("未找到已有安装。");
+                var marker = InstallEngine.Existing(true) ?? throw new InvalidOperationException("未找到已有安装。");
                 if (marker.Build?.BuildId != journal.Ticket.SourceBuildId) throw new InvalidOperationException("本机安装版本已经变化，请重新确认。");
                 _ = PackageContents.Check();
                 SetupPaths.VerifyPath(SetupPaths.InstalledSetup, SetupPaths.ProgramRoot);

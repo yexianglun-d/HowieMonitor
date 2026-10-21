@@ -61,7 +61,7 @@ async function generateCode() { replacing.value = false; await generate(); now.v
     <div class="panel-heading"><div><h2 id="uninstall-heading">卸载采集端</h2><p>请在需要卸载的 Windows 电脑上操作。</p></div></div>
     <ol><li>打开 Windows 设置 → 应用 → 已安装的应用，搜索 <strong>Howie</strong>，找到“Howie Monitor 采集端”后选择卸载。</li><li>找不到应用时，按 <kbd>Win + R</kbd>，粘贴下方命令，打开卸载向导。</li></ol>
     <div class="uninstall-command"><code>{{ uninstallCommand }}</code><ElButton @click="copyUninstallCommand">复制卸载命令</ElButton></div>
-    <p class="footnote">向导默认保留本地配置和缓存，可自行选择删除。卸载会停止采集并移除 Windows 服务，云端历史仍保留。</p>
+    <p class="footnote">新版向导默认彻底清理本机配置、令牌和缓存，可取消选项以保留配置。卸载会移除 Windows 服务和安装目录，云端历史保留。</p>
     <ElCollapse class="help-details"><ElCollapseItem title="找不到应用或文件怎么办" name="missing"><p>设置中找不到时，也可在控制面板 → 程序 → 程序和功能中搜索 Howie。</p><p>此命令适用于安装向导安装的采集端。请检查 <code>%ProgramFiles%\HowieMonitor</code> 中是否有 <code>HowieMonitorSetup.exe</code>。旧版或脚本部署可能没有此文件，需要先核对服务的实际安装路径。</p></ElCollapseItem></ElCollapse>
   </section>
 </template>

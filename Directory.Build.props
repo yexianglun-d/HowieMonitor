@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <MonitorVersion>0.2.0</MonitorVersion>
+    <MonitorVersion>0.2.1</MonitorVersion>
     <MonitorBuildId Condition="'$(MonitorBuildId)' == ''">development</MonitorBuildId>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>

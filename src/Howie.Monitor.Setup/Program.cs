@@ -9,6 +9,25 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        string? uninstallStage = null;
+        try
+        {
+            if (args is ["--staged-uninstall", var id]) { uninstallStage = SetupUninstall.EnterStage(id); args = ["--uninstall"]; }
+            if (!SetupUninstall.RelaunchIfNeeded(args)) Run(args);
+        }
+        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223) { Environment.ExitCode = 130; }
+        catch (Exception ex)
+        { MessageBox.Show(ex is InvalidOperationException ? ex.Message : "安装维护未能启动，请检查文件权限后重试。", "Howie Monitor", MessageBoxButtons.OK, MessageBoxIcon.Error); Environment.ExitCode = 1; }
+        finally
+        {
+            if (uninstallStage is not null)
+                try { SetupUninstall.RemoveStageAfterExit(uninstallStage); }
+                catch (Exception ex) when (ex is IOException or System.ComponentModel.Win32Exception or InvalidOperationException)
+                { MessageBox.Show("临时卸载向导未能自动清理，可关闭窗口后重新运行新版安装包检查。", "Howie Monitor", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        }
+    }
+    private static void Run(string[] args)
+    {
         if (args is [var updateMode, var updateId] && updateMode is "--apply-update" or "--recover-update")
         {
             try { Environment.ExitCode = SetupUpdater.Run(updateId, args[0] == "--recover-update").GetAwaiter().GetResult(); }

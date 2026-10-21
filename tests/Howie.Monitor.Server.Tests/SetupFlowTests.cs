@@ -69,6 +69,7 @@ public sealed class SetupFlowTests
         Assert.Equal("卸载采集端", Field<Label>(form, "_title").Text);
         Assert.DoesNotContain("真实上报", Field<Label>(form, "_description").Text);
         Assert.Equal("查看卸载选项", Field<Button>(form, "_next").Text);
+        Assert.True(Field<CheckBox>(form, "_removeData").Checked);
         AssertUninstallStep(form, 0);
         return Task.CompletedTask;
     });

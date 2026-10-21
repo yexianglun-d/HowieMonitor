@@ -24,6 +24,8 @@ Use [GitHub Releases](https://github.com/yexianglun-d/HowieMonitor/releases) for
 
 The official installer currently connects to **https://monitor.howied.me/**. This is a private dashboard, not a public hosted service: only its operator can issue pairing codes. Obtain permission from that operator before using it. Review the [privacy notice](PRIVACY.md) and the server address before pairing a computer. To run your own server and build an installer for it, see [building and deployment](BUILDING.md).
 
+The updated uninstaller runs outside the installation directory so it can remove the installed executable immediately. Complete removal is selected by default and clears local identity, telemetry queues, update snapshots and the current account's installer state; uncheck it to preserve configuration and queued samples. The temporary uninstaller removes itself after its window closes. A newer installer can resume an interrupted uninstall after verifying product ownership, service removal and unlocked files, and cancels only this product's obsolete reboot-delete entries. Files still held by another process require that process to close; do not manually delete the pending marker. Server history is retained.
+
 Do not put dashboard passwords, SendKeys, pairing codes or device tokens in an issue. Source releases contain examples only, not live credentials or telemetry.
 
 ## Code signing policy

@@ -22,7 +22,7 @@ public sealed class SetupForm : Form
     private readonly TextBox _code = new() { Width = 330, MaxLength = 40, Font = new("Consolas", 18) };
     private readonly CheckBox _confirm = new() { AutoSize = true, Text = "我已阅读隐私说明，确认将这台电脑的监控数据上传至上述服务，并按绑定码指定的方式接入。", ForeColor = Color.FromArgb(230, 232, 228) };
     private readonly CheckBox _allowTerminal = new() { AutoSize = true, Text = "允许私人面板使用当前登录的本账号运行管理员 PowerShell。远程命令可修改文件和系统设置；注销后不可用，不保存 Windows 密码。", ForeColor = Color.FromArgb(230, 232, 228) };
-    private readonly CheckBox _removeData = new() { AutoSize = true, Text = "同时删除本地配置、令牌和缓存（无法撤回）", ForeColor = Color.FromArgb(230, 232, 228) };
+    private readonly CheckBox _removeData = new() { AutoSize = true, Checked = true, Text = "彻底卸载：删除本机配置、令牌、采集缓存和升级文件（无法撤回）", ForeColor = Color.FromArgb(230, 232, 228) };
     private readonly CheckBox _allowUpdates = new() { AutoSize = true, Text = "允许从私人面板确认升级采集端。仅安装本服务发布并校验的安装包；会重启采集服务，失败时尝试恢复原版本。", ForeColor = Color.FromArgb(230, 232, 228) };
     private readonly List<Label> _steps = [];
     private readonly bool _uninstall;
@@ -425,7 +425,7 @@ public sealed class SetupForm : Form
                 _next.Text = "查看卸载选项"; break;
             case 1:
                 _title.Text = "确认卸载"; _description.Text = "停止并移除本产品后台服务，云端历史保留。";
-                TextLine("默认保留本地配置与缓存，便于重新安装。若选择删除，将在停止服务后删除本产品私有数据。其他软件与服务不受影响。");
+                TextLine("默认彻底清理本机配置、令牌、采集缓存和升级文件。需要保留配置以便重装时，可取消下方选项。云端记录保留。");
                 _content.Controls.Add(_removeData); _next.Text = "确认卸载"; break;
             case 2:
                 _title.Text = "正在卸载"; _description.Text = "正在请求管理员授权并处理卸载。";
@@ -433,13 +433,19 @@ public sealed class SetupForm : Form
                 _next.Text = "正在卸载…"; break;
             case 3:
                 _title.Text = "卸载完成"; _description.Text = "采集已停止，Windows 服务已移除。";
-                TextLine("云端历史没有删除。如有正在使用的安装文件，将在下次 Windows 启动时清理，无需现在重启。");
+                TextLine("安装目录与 Windows 服务已移除。关闭窗口后自动清理本次临时卸载向导，正常情况下无需重启。");
+                TextLine(_removeData.Checked ? "本机配置、令牌、采集缓存和升级文件已删除；云端历史保留。" : "已按选择保留本机配置与采集缓存；升级文件已清理，云端历史保留。");
                 _next.Text = "关闭向导"; break;
         }
     }
     private async Task Uninstall()
     {
-        if (_step == 0) { InstallEngine.Existing(); ShowStep(1); return; }
+        if (_step == 0)
+        {
+            if (File.Exists(SetupUninstall.PendingFile)) _ = SetupUninstall.ReadPending();
+            else InstallEngine.Existing();
+            ShowStep(1); return;
+        }
         ShowStep(2);
         try { await _remove(_removeData.Checked, _cancellation.Token); }
         catch { ShowStep(1); throw; }

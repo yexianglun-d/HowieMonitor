@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.IO.Compression;
 using System.ServiceProcess;
-using System.Runtime.InteropServices;
 using Microsoft.Win32;
 using Howie.Monitor.Contracts;
 
@@ -9,13 +8,17 @@ namespace Howie.Monitor.Setup;
 
 public static class InstallEngine
 {
-    private const string UninstallKey = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\HowieMonitor";
+    internal const string UninstallKey = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\HowieMonitor";
     private static string ServiceCommand(string agent) => $"\"{agent}\" --config \"{SetupPaths.ConfigurationFile}\"";
-    public static InstallMarker? Existing()
+    public static InstallMarker? Existing() => Existing(false);
+    internal static InstallMarker? Existing(bool maintenanceLockHeld)
     {
         SetupPaths.VerifyPath(SetupPaths.MarkerFile, SetupPaths.ProgramRoot);
-        if (File.Exists(Path.Combine(SetupPaths.ProgramRoot, "uninstall-pending.json")))
-            throw new InvalidOperationException("上一次卸载仍有使用中文件待清理，请关闭向导并重启后重新安装。");
+        if (File.Exists(SetupUninstall.PendingFile))
+        {
+            using var pendingLock = maintenanceLockHeld ? null : AcquireLock();
+            SetupUninstall.RecoverPending();
+        }
         var marker = SetupPaths.Read<InstallMarker>(SetupPaths.MarkerFile);
         if (marker is not null && marker.Product != SetupPaths.Product) throw new InvalidOperationException("安装目录中的标记不属于本产品。");
         if (marker is not null) SetupPaths.VerifyPath(marker.AgentPath, SetupPaths.ProgramRoot);
@@ -30,7 +33,9 @@ public static class InstallEngine
         SetupPaths.ValidateConfiguration(plan.Configuration);
         if (plan.Configuration.Terminal is { Enabled: true } access && access.UserSid != plan.OwnerSid)
             throw new InvalidOperationException("管理员终端只能授权本次安装的账号。");
-        var previous = Existing();
+        SetupPaths.PrivateDirectory(Path.GetDirectoryName(SetupPaths.DataRoot)!, plan.OwnerSid, false);
+        using var installLock = controlledUpdate ? null : AcquireLock();
+        var previous = Existing(true);
         string dataMarker = Path.Combine(SetupPaths.DataRoot, "product.json");
         SetupPaths.VerifyPath(dataMarker, SetupPaths.DataRoot);
         if (previous is null && Directory.Exists(SetupPaths.DataRoot) && Directory.EnumerateFileSystemEntries(SetupPaths.DataRoot).Any()
@@ -40,12 +45,12 @@ public static class InstallEngine
         bool serviceExisted = serviceKey is not null;
         if (previous is null && Directory.Exists(SetupPaths.ProgramRoot) && Directory.EnumerateFileSystemEntries(SetupPaths.ProgramRoot).Any())
             throw new InvalidOperationException("安装目录已有其他内容，未覆盖。");
+        // 标记可能被用户手动删过；写入新文件前也要撤销仍指向本产品路径的旧删除任务。
+        PendingFileDeletes.RemoveOwnedDeletes(SetupPaths.ProgramRoot, SetupPaths.DataRoot);
         string hash = PackageContents.PayloadHash;
         using var payload = PackageContents.OpenPayload();
         string versionRoot = Path.Combine(SetupPaths.ProgramRoot, "versions", AgentBuild.Current.Version + "-" + hash[..12]);
         SetupPaths.VerifyPath(Path.Combine(versionRoot, "Howie.Monitor.Agent.exe"), SetupPaths.ProgramRoot);
-        SetupPaths.PrivateDirectory(Path.GetDirectoryName(SetupPaths.DataRoot)!, plan.OwnerSid, false);
-        using var installLock = controlledUpdate ? null : AcquireLock();
         SetupPaths.PrivateDirectory(SetupPaths.DataRoot, plan.OwnerSid, false);
         SetupPaths.PrivateDirectory(AgentUpdateFiles.Root, plan.OwnerSid, false);
         SetupPaths.Write(dataMarker, new Dictionary<string, string> { ["product"] = SetupPaths.Product });
@@ -170,41 +175,22 @@ public static class InstallEngine
     public static async Task Uninstall(bool removeData, CancellationToken cancellationToken)
     {
         if (!SetupPaths.IsAdministrator) throw new InvalidOperationException("卸载需要管理员授权。");
-        var marker = Existing() ?? throw new InvalidOperationException("未找到本产品安装，未删除任何文件。");
         using var installLock = AcquireLock();
+        if (File.Exists(SetupUninstall.PendingFile))
+        {
+            _ = SetupUninstall.ReadPending();
+            SetupPaths.Write(SetupUninstall.PendingFile, new PendingUninstall(SetupPaths.Product, removeData));
+            SetupUninstall.RecoverPending(); return;
+        }
+        _ = Existing(true) ?? throw new InvalidOperationException("未找到本产品安装，未删除任何文件。");
+        if (Path.GetFullPath(Environment.ProcessPath!).StartsWith(SetupPaths.ProgramRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("请使用新版安装包的卸载入口，卸载向导需要先移出安装目录。");
         await Stop(cancellationToken);
         using (var serviceKey = Registry.LocalMachine.OpenSubKey("SYSTEM\\CurrentControlSet\\Services\\" + SetupPaths.ServiceName))
             if (serviceKey is not null) await Sc(["delete", SetupPaths.ServiceName], cancellationToken);
-        string self = Path.GetFullPath(Environment.ProcessPath!);
-        DeleteOwnedTree(SetupPaths.ProgramRoot, SetupPaths.ProgramRoot, self);
-        if (Directory.Exists(SetupPaths.ProgramRoot))
-        {
-            string pending = Path.Combine(SetupPaths.ProgramRoot, "uninstall-pending.json");
-            SetupPaths.Write(pending, new { product = SetupPaths.Product });
-            if (!MoveFileEx(pending, null, 4)) throw new InvalidOperationException("卸载清理登记失败，请重启后检查安装目录。");
-        }
-        Registry.LocalMachine.DeleteSubKeyTree(UninstallKey, false);
-        if (removeData) DeleteOwnedTree(SetupPaths.DataRoot, SetupPaths.DataRoot, self);
+        SetupPaths.Write(SetupUninstall.PendingFile, new PendingUninstall(SetupPaths.Product, removeData));
+        SetupUninstall.RecoverPending();
     }
-    private static void DeleteOwnedTree(string directory, string root, string runningExecutable)
-    {
-        SetupPaths.VerifyPath(Path.Combine(directory, ".check"), root);
-        foreach (string file in Directory.GetFiles(directory))
-        {
-            SetupPaths.VerifyPath(file, root);
-            if (file.Equals(runningExecutable, StringComparison.OrdinalIgnoreCase))
-            {
-                if (!MoveFileEx(file, null, 4)) throw new InvalidOperationException("卸载后清理登记失败，请重启后通过向导重试。");
-            }
-            else File.Delete(file);
-        }
-        foreach (string child in Directory.GetDirectories(directory)) DeleteOwnedTree(child, root, runningExecutable);
-        if (!Directory.EnumerateFileSystemEntries(directory).Any()) Directory.Delete(directory);
-        else if (!MoveFileEx(directory, null, 4)) throw new InvalidOperationException("目录清理登记失败，请重启后重试。");
-    }
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool MoveFileEx(string existing, string? target, int flags);
     private static async Task Sc(string[] arguments, CancellationToken cancellationToken)
     {
         var start = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "sc.exe"))
