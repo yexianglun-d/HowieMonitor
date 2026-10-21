@@ -26,7 +26,7 @@ public sealed class SetupUninstallTests
         Assert.Equal(1, cancelled); Assert.Equal(1, unregistered);
         Assert.False(Directory.Exists(fixture.Paths.ProgramRoot));
         Assert.True(File.Exists(Path.Combine(fixture.Paths.DataRoot, "agent.json")));
-        Assert.False(Directory.Exists(fixture.Paths.UpdatesRoot));
+        Assert.True(File.Exists(Path.Combine(fixture.Paths.UpdatesRoot, "operation.json")));
         Assert.True(File.Exists(fixture.Unrelated));
         SetupUninstall.RecoverPending(fixture.Paths, true, () => true, () => throw new Exception(), () => throw new Exception());
     }
@@ -219,6 +219,7 @@ public sealed class SetupUninstallTests
             File.WriteAllText(Unrelated, "not the product");
             File.WriteAllText(Path.Combine(Paths.DataRoot, "agent.json"), "private identity");
             File.WriteAllText(Path.Combine(Paths.UpdatesRoot, "snapshot.json"), "update snapshot");
+            File.WriteAllText(Path.Combine(Paths.UpdatesRoot, "operation.json"), "local repair receipt source");
             File.WriteAllText(Path.Combine(Paths.WorkRoot, "state.json"), "pending installer state");
             SetupPaths.Write(Path.Combine(Paths.DataRoot, "product.json"), new Dictionary<string, string> { ["product"] = SetupPaths.Product });
         }

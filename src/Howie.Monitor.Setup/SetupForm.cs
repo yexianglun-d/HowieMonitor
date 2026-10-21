@@ -434,7 +434,7 @@ public sealed class SetupForm : Form
             case 3:
                 _title.Text = "卸载完成"; _description.Text = "采集已停止，Windows 服务已移除。";
                 TextLine("安装目录与 Windows 服务已移除。关闭窗口后自动清理本次临时卸载向导，正常情况下无需重启。");
-                TextLine(_removeData.Checked ? "本机配置、令牌、采集缓存和升级文件已删除；云端历史保留。" : "已按选择保留本机配置与采集缓存；升级文件已清理，云端历史保留。");
+                TextLine(_removeData.Checked ? "本机配置、令牌、采集缓存和升级文件已删除；云端历史保留。" : "已按选择保留本机配置、采集缓存和升级恢复记录；云端历史保留。");
                 _next.Text = "关闭向导"; break;
         }
     }

@@ -112,9 +112,9 @@ internal static class SetupUninstall
         try
         {
             DeleteTree(paths.ProgramRoot, paths.ProgramRoot, paths.PendingFile);
-            DeleteTree(paths.UpdatesRoot, paths.UpdatesRoot);
             if (removeData)
             {
+                DeleteTree(paths.UpdatesRoot, paths.UpdatesRoot);
                 string productMarker = Path.Combine(paths.DataRoot, "product.json");
                 DeleteTree(paths.DataRoot, paths.DataRoot, productMarker);
                 File.Delete(productMarker);
