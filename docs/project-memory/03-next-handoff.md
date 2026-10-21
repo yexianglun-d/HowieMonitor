@@ -2,6 +2,12 @@
 
 ## 下次继续
 
+- 最新 Windows 下载包为 CLI 实现 `c67e088`，2026-10-21 11:11（北京时间）已更新；服务器应用继续是 `f553cf9`，两者来源现在不同，不能再把下载包假设成与应用同一提交。只更新文件，无停服或数据迁移。新 EXE SHA-256 `fbea3549265a716eb1f1a1ca718c7d5a7bc7036f0d9b4c277da9dd453ac38fc5`，93,950,267 字节；旧包在 `staging/deploy-cli-20261021/pre-switch/HowieMonitorSetup.exe`。
+- 用户选择交互式 CLI，入口为管理员 PowerShell 的 `Start-Process -FilePath .\HowieMonitorSetup.exe -ArgumentList '--cli' -NoNewWindow -Wait`；原 GUI 保留，`--help` / `--cli --help` 可读帮助。CLI 不自动提权换账号、不要求 Windows 密码、不提供无人值守参数；新终端授权默认关闭，同账号修复保留现有授权，实际安装前必须明确确认。
+- `SetupCli.cs` 复用 `InstallEngine` / `SetupClient`，共享 `SetupUiState` / `ClaimAttempt` 文件格式；先保存绑定请求 ID，网络响应丢失后复用请求。重试保留旧电脑接管说明，不能吞掉替换风险；接入未验证不返回成功，待重启标记不删除。`SetupConsole.cs` 处理 WinExe 的父控制台及已有重定向流，PowerShell 必须等待进程以避免同时读取终端输入。
+- Windows Actions `39536282588` 通过 226 项 .NET（含 17 项 CLI）、20 项 Python、59 项前端及真实生成包 CLI 帮助入口/嵌入载荷检查。artifact `12317466359`，ZIP SHA-256 `c84c7420a4a0e2b9732c8a955d45535bca6c1bd63eaa328643a535e5c811f8f9`。本轮未执行目标电脑的交互安装或终端命令，原生控制台人机交互/实际服务安装仍待用户电脑验收。记录在 `.local/cli-installer-20261021/` 与 `.local/deploy-cli-20261021/`。
+- 用户此前确认的提示是“上一次卸载仍有使用中文件待清理，请关闭向导并重启后重新安装”。这是 `uninstall-pending.json` 拦截，不是单独空主目录；不要让用户删标记绕过，Windows 的旧延迟删除任务可能仍存在。先重启，再重新安装；已经卸载的机器不属于已有安装修复路径。以下为前次完整部署记录。
+
 - 最新应用与 Windows 安装包 `f553cf9` 已于 2026-10-21 00:17（北京时间）部署并推送。当前 `/opt/howie-monitor/current` 为 `/opt/howie-monitor/releases/20261021-f553cf9`，上一版 `20261020-0959d4a`；旧安装包在服务器 `staging/deploy-uninstall-20261021/pre-switch/HowieMonitorSetup.exe`。原容器/用户/镜像/数据目录和 Nginx 未改。当前 2 台电脑及凭据/通知/密钥保留；不要按旧记录恢复成 4 台电脑。
 - Windows Actions `39454440301` 通过 209 项 .NET、20 项 Python、59 项前端及实际安装包运行时/嵌入载荷检查，新增 7 个卸载流程/布局用例已在 Windows 运行。产物 ID `12280236526`，ZIP SHA-256 `53f538cb4580c0d32578af88f87778acd090da5142af42cb2f5e80012d39daa4`；受保护下载的新 EXE SHA-256 `60464df0b5c8971045be5c8aa098e500eeaf2caf159188609c59319219b4cce4`，93,932,360 字节，仍未签名。记录在 `.local/deploy-uninstall-20261021/`。
 - 新版向导四步与网页卸载引导均已发布；用户需刷新网页、重新下载安装程序并运行安装/修复，才能更新电脑上旧 EXE 的菜单。备用命令仍为 `"%ProgramFiles%\HowieMonitor\HowieMonitorSetup.exe" --uninstall`。用户已确认旧版能够卸载，不要误判成缺注册、改写注册表或替用户执行卸载。
