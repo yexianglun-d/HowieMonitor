@@ -8,6 +8,11 @@ Howie Monitor 是个人使用的 Windows 11 多电脑性能监控工具：采集
 
 ## 当前状态
 
+- 单命令下载安装的服务端 `76c63623fb7459b87cf8c665170535b634f4c8a0` 已于 2026-10-21 11:55（北京时间）上线。管理员 PowerShell 可运行 `& ([scriptblock]::Create((Invoke-WebRequest -UseBasicParsing 'https://monitor.howied.me/install.ps1' -ErrorAction Stop).Content))`，自动下载、核对大小/SHA-256，再在同一窗口启动已有 CLI。电脑接入页已新增复制命令入口；绑定码仍运行后输入，终端授权保持显式选择。
+- 分发边界：新增公开只读 `/install.ps1` 与 `/install/{sha256}/HowieMonitorSetup.exe`，仅分发软件，不返回设备凭据。原 `/api/setup`、`/api/setup/download` 和监控/设置 API 继续要求登录。下载源来自可信服务配置、拒绝跳转、每 IP 限流；校验与传输使用同一文件句柄，包更新时旧地址失败并要求重试。下载在 Program Files 的独立目录中完成，退出只清理该目录，不修改执行策略或安装授权。
+- Windows Actions `39540650446`（验证源码 `167f9f28b1853d3c80ab0d3a6d514822810fdbb8`）完整成功：236 项 .NET（34 Collector / 172 Server / 30 Terminal，含 7 个原生 Windows PowerShell 5.1 下载块用例）、20 项 Python、发布/包检查通过；59 项前端测试及类型/生产构建通过。本轮后续提交只修测试宿主的模块路径、CLIXML 进度识别和冷启动限时，运行代码与已构建的 `76c6362` 一致。测试使用下载/进程替身，目标电脑完整交互安装与提权仍待实机验收。
+- 服务器隔离验证已通过公开完整包下载/摘要、鉴权、电脑隔离及重启；公网脚本、完整包摘要、5 项页面资源摘要与 4 项鉴权检查通过。安装包沿用已发布 `c67e088`，SHA-256 `fbea3549265a716eb1f1a1ca718c7d5a7bc7036f0d9b4c277da9dd453ac38fc5`、93,950,267 字节。本次未替换 EXE 或操作目标电脑。新备份 `monitor-20261021-035141.tar.gz` 恢复校验通过，SHA-256 `382f96566b9d1aaff5e8057e701933b144ecf1de9223c9fa478c582da525bbeb`；备份停服 21.37 秒，正式切换 2.78 秒，现有两台电脑的凭据/通知规则和密钥保留，Nginx 未改。证据 `.local/bootstrap-install-20261021/`，内置浏览器桌面/390px 截图 `output/bootstrap-install-20261021/`。以下为前次发布记录。
+
 - 最新 Windows 安装包 `c67e0883a331bb94516ab62147ea08c35547e8ee` 已于 2026-10-21 11:11（北京时间）更新到面板受保护下载，支持 `--cli` 交互式安装，默认仍打开 GUI。在当前管理员账号的 PowerShell 使用 `Start-Process -FilePath .\HowieMonitorSetup.exe -ArgumentList '--cli' -NoNewWindow -Wait`，按提示输入绑定码、选择本账号终端授权并确认安装。首次终端授权默认关闭；同账号修复保留现有授权。无人值守/免安装模式未实现。
 - CLI 复用现有安装引擎、请求身份、缓存和接入协议，支持服务修复、GUI/CLI 安装请求恢复；绑定兑换响应丢失复用请求 ID，接管旧电脑的提示在重试后保留。仅在服务运行、名称匹配、真实采样新鲜及激活确认后返回 0；取消/EOF 为 130，未确认或 CLI 参数错误为 2，安装/验证错误为 1。卸载待重启状态不绕过。安装请求的真实令牌和绑定码不写入输出。
 - Windows Actions `39536282588` 完整编译、226 项 .NET（34 Collector / 165 Server / 27 Terminal，新增 17 项 CLI）、20 项 Python、59 项前端，以及自包含安装包的运行时/嵌入载荷和 `--cli --help` 子进程检查通过。EXE SHA-256 `fbea3549265a716eb1f1a1ca718c7d5a7bc7036f0d9b4c277da9dd453ac38fc5`，93,950,267 字节，仍未签名。Windows 目标电脑的交互读入、真实服务安装及终端提权仍需实机确认，不能用模拟流程代替。

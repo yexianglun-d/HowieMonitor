@@ -2,6 +2,10 @@
 
 ## 下次继续
 
+- 当前应用为 `76c6362`，2026-10-21 11:55（北京时间）已上线单命令下载安装入口及接入页复制按钮；下载 EXE 仍为 `c67e088` / `fbea3549…ac38fc5`（93,950,267 字节），不要把应用和安装包当成同一源码版本。公开分发端点只返回脚本/软件，原受保护下载 API 仍需登录。
+- Windows 验证 `39540650446` 对应 `167f9f2`，236 项 .NET、20 项 Python及完整发布通过；与应用 `76c6362` 相比只调整测试/清单，运行代码及文档无差异。原生 5.1 子进程需使用自身 PSModulePath；冷启动进度可能在错误流中使用 CLIXML，测试只接受 progress 记录，错误/警告仍失败。没有真实安装 Windows 服务或开启终端权限。
+- 公网脚本、完整包摘要、5 项页面资源摘要与 4 项鉴权检查通过；服务器隔离校验与备份恢复已通过，脚本/摘要和部署记录在 `.local/bootstrap-install-20261021/`。最新一致性备份 `/opt/howie-monitor/backups/monitor-20261021-035141.tar.gz`（SHA-256 `382f96566b9d1aaff5e8057e701933b144ecf1de9223c9fa478c582da525bbeb`）。用户下一步在目标 Windows 的管理员 PowerShell 运行接入页命令，输入绑定码并确认，才算完成目标实机安装验收。以下为前次发布记录。
+
 - 最新 Windows 下载包为 CLI 实现 `c67e088`，2026-10-21 11:11（北京时间）已更新；服务器应用继续是 `f553cf9`，两者来源现在不同，不能再把下载包假设成与应用同一提交。只更新文件，无停服或数据迁移。新 EXE SHA-256 `fbea3549265a716eb1f1a1ca718c7d5a7bc7036f0d9b4c277da9dd453ac38fc5`，93,950,267 字节；旧包在 `staging/deploy-cli-20261021/pre-switch/HowieMonitorSetup.exe`。
 - 用户选择交互式 CLI，入口为管理员 PowerShell 的 `Start-Process -FilePath .\HowieMonitorSetup.exe -ArgumentList '--cli' -NoNewWindow -Wait`；原 GUI 保留，`--help` / `--cli --help` 可读帮助。CLI 不自动提权换账号、不要求 Windows 密码、不提供无人值守参数；新终端授权默认关闭，同账号修复保留现有授权，实际安装前必须明确确认。
 - `SetupCli.cs` 复用 `InstallEngine` / `SetupClient`，共享 `SetupUiState` / `ClaimAttempt` 文件格式；先保存绑定请求 ID，网络响应丢失后复用请求。重试保留旧电脑接管说明，不能吞掉替换风险；接入未验证不返回成功，待重启标记不删除。`SetupConsole.cs` 处理 WinExe 的父控制台及已有重定向流，PowerShell 必须等待进程以避免同时读取终端输入。
