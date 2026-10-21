@@ -72,6 +72,9 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("enrollment", context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "local", _ => new FixedWindowRateLimiterOptions
         { PermitLimit = 6, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    options.AddPolicy("setup-download", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "local", _ => new FixedWindowRateLimiterOptions
+        { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 var app = builder.Build();
 app.Services.GetRequiredService<TelemetryStore>().InitializeEnrollment(app.Services.GetRequiredService<CredentialStore>().Device,
@@ -97,6 +100,7 @@ app.UseAuthorization();
 app.UseRateLimiter();
 app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(10), KeepAliveTimeout = TimeSpan.FromSeconds(20) });
 TerminalEndpoints.Map(app, hosting, Csrf);
+SetupBootstrap.Map(app, hosting);
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok" }));
 app.MapGet("/api/auth/session", (HttpContext context, CredentialStore credentials) =>
     Results.Ok(new { authenticated = context.User.Identity?.IsAuthenticated == true, setupRequired = !credentials.IsSetup }));
@@ -159,7 +163,11 @@ app.MapPost("/api/enrollment/claim", (EnrollmentClaim request, TelemetryStore st
 }).RequireRateLimiting("enrollment");
 var viewing = app.MapGroup("/api").RequireAuthorization();
 viewing.MapGet("/enrollment", (TelemetryStore store) => Results.Ok(store.EnrollmentOverview(DateTimeOffset.UtcNow)));
-viewing.MapGet("/setup", (SetupPackage package) => Results.Ok(package.Info()));
+viewing.MapGet("/setup", (SetupPackage package) =>
+{
+    var info = package.Info();
+    return Results.Ok(info with { InstallCommand = info.Available ? SetupBootstrap.Command(hosting) : null });
+});
 viewing.MapGet("/setup/download", (SetupPackage package) => package.Info().Available
     ? Results.File(package.Path, "application/octet-stream", fileDownloadName: "HowieMonitorSetup.exe", enableRangeProcessing: true)
     : Results.NotFound(new { error = "安装包尚未发布，请稍后刷新。" }));

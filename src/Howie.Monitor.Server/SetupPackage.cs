@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 
 namespace Howie.Monitor.Server;
 
-public sealed record SetupDownload(bool Available, string Version, string? FileName, long? Bytes, string? Sha256);
+public sealed record SetupDownload(bool Available, string Version, string? FileName, long? Bytes, string? Sha256, string? InstallCommand = null);
 public sealed class SetupPackage(string path)
 {
     private readonly object _gate = new();
@@ -22,6 +22,23 @@ public sealed class SetupPackage(string path)
                 _lastWrite = file.LastWriteTimeUtc; _length = file.Length;
             }
             return new(true, "0.1.0", "HowieMonitorSetup.exe", file.Length, _hash);
+        }
+    }
+    public FileStream? OpenVerified(string sha256)
+    {
+        if (sha256.Length != 64 || !sha256.All(Uri.IsHexDigit)) return null;
+        lock (_gate)
+        {
+            if (!File.Exists(Path)) return null;
+            // 校验和响应使用同一文件句柄，发布期间替换安装包也不会混用两个版本。
+            var stream = new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+            try
+            {
+                if (!string.Equals(Convert.ToHexString(SHA256.HashData(stream)), sha256, StringComparison.OrdinalIgnoreCase))
+                { stream.Dispose(); return null; }
+                stream.Position = 0; return stream;
+            }
+            catch { stream.Dispose(); throw; }
         }
     }
 }

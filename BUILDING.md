@@ -16,6 +16,16 @@ The publisher installs browser dependencies with `npm ci`, performs strict Vue t
 
 ## Interactive CLI installation
 
+After deploying a server that includes the bootstrap endpoints and publishing a CLI-capable installer, the dashboard's computer enrollment page provides a single command to download and start installation. For the official deployment, run this in administrator PowerShell on the target Windows 11 x64 computer:
+
+```powershell
+& ([scriptblock]::Create((Invoke-WebRequest -UseBasicParsing 'https://monitor.howied.me/install.ps1' -ErrorAction Stop).Content))
+```
+
+The bootstrap checks the operating system and current administrator account, downloads into a unique directory under Program Files, verifies the exact byte count and SHA-256, starts the same installer with `--cli`, waits for its result, and removes only its download directory. It does not change PowerShell's execution policy. The binding code is entered interactively, never included in the command. The complete Windows installation still needs acceptance on a target computer; downloader simulations do not substitute for that check.
+
+`/install.ps1` and `/install/{sha256}/HowieMonitorSetup.exe` are public, read-only distribution endpoints with per-IP limits; they contain no device credentials or panel data. The script uses the configured HTTPS public origin, pins one package hash, disables redirects, and fails if the package changes before download. Run the command again to obtain the new package. Panel APIs, including `/api/setup/download`, still require login, and pairing still requires an operator-issued code. Reverse proxies must forward `/install.ps1` and `/install/` to the application; the supplied catch-all Nginx template already does so. Self-hosted servers generate their command from the configured origin and must publish an installer built for that same origin.
+
 The setup source supports `--cli` in addition to the default graphical wizard. Use a package built from this source; older installers do not recognize this mode. On the target Windows 11 x64 computer, open PowerShell as the administrator account that should own the installation, then run:
 
 ```powershell
