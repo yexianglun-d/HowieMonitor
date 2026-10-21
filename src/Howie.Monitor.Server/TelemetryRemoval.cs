@@ -29,7 +29,7 @@ public sealed partial class TelemetryStore
         lock (_gate)
         {
             using var db = Open(); var pending = Pending(db); using var transaction = db.BeginTransaction();
-            Execute(db, transaction, "INSERT OR IGNORE INTO computer_removals VALUES($id); DELETE FROM enrollment_devices WHERE device=$id;", ("$id", id));
+            Execute(db, transaction, "INSERT OR IGNORE INTO computer_removals VALUES($id); DELETE FROM enrollment_devices WHERE device=$id; DELETE FROM agent_updates WHERE device=$id;", ("$id", id));
             if (pending is not null && (pending.DeviceId == id || pending.ExpectedDeviceId == id))
                 Execute(db, transaction, "DELETE FROM enrollment_pending");
             // 保留空的引导行，避免启动时重新导入已撤销的旧引导凭据。

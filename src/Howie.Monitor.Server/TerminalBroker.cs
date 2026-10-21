@@ -59,6 +59,8 @@ public sealed class TerminalSession
 
 public sealed class TerminalBroker(ILogger<TerminalBroker> logger)
 {
+    public bool HasActiveSession(string computerId)
+    { lock (_gate) return _sessions.Values.Any(session => session.ComputerId == computerId && !session.Closed); }
     private sealed record Presence(TerminalCapability Capability, DateTimeOffset SeenAt);
     private readonly object _gate = new();
     private readonly Dictionary<string, Presence> _computers = [];

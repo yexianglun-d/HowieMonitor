@@ -11,15 +11,18 @@ namespace Howie.Monitor.Server.Tests;
 public sealed class SetupCliTests
 {
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task InstallationRequiresConsentAndActivatesOnlyAfterRealReadiness(bool allowTerminal)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task InstallationRequiresConsentAndActivatesOnlyAfterRealReadiness(bool allowTerminal, bool allowUpdates)
     {
         using var fixture = new Fixture();
-        Assert.Equal(0, await fixture.Run("ABCD-1234-EF56\n" + (allowTerminal ? "y" : "") + "\ny\n"));
+        Assert.Equal(0, await fixture.Run("ABCD-1234-EF56\n" + (allowTerminal ? "y" : "") + "\n" + (allowUpdates ? "y" : "") + "\ny\n"));
         Assert.Equal(1, fixture.Installs); Assert.Equal(1, fixture.Claims); Assert.Equal(1, fixture.Activations);
         Assert.NotNull(fixture.Plan);
         Assert.Equal(allowTerminal, fixture.Plan.Configuration.Terminal?.Enabled ?? false);
+        Assert.Equal(allowUpdates, fixture.Plan.Configuration.Updates?.Enabled ?? false);
         if (allowTerminal) Assert.Equal(Fixture.OwnerSid, fixture.Plan.Configuration.Terminal!.UserSid);
         Assert.Contains("接入验证通过", fixture.Output.ToString());
         Assert.DoesNotContain(Fixture.Token, fixture.Output.ToString());
@@ -31,12 +34,13 @@ public sealed class SetupCliTests
     public async Task RepairKeepsTheDeviceIdentityAndExistingAccountAuthorization()
     {
         using var fixture = new Fixture { ExistingInstallation = true };
-        fixture.Configuration = fixture.Configuration with { Terminal = new(true, Fixture.OwnerSid) };
-        Assert.Equal(0, await fixture.Run("\ny\n"));
+        fixture.Configuration = fixture.Configuration with { Terminal = new(true, Fixture.OwnerSid), Updates = new(true) };
+        Assert.Equal(0, await fixture.Run("\n\ny\n"));
         Assert.Equal(0, fixture.Claims); Assert.Equal(0, fixture.Activations);
         Assert.Equal("cli-device", fixture.Plan!.Configuration.DeviceId); Assert.Null(fixture.Plan.RequestId);
         Assert.Equal(Fixture.Token, fixture.Plan.Configuration.Token);
         Assert.Equal(Fixture.OwnerSid, fixture.Plan.Configuration.Terminal!.UserSid);
+        Assert.True(fixture.Plan.Configuration.Updates!.Enabled);
         Assert.Contains("修复/升级", fixture.Output.ToString());
     }
 
@@ -44,11 +48,11 @@ public sealed class SetupCliTests
     public async Task DecliningInstallationDoesNotInstallAndCanResumeWithoutAnotherClaim()
     {
         using var fixture = new Fixture();
-        Assert.Equal(2, await fixture.Run("ABCD-1234-EF56\nn\nn\n"));
+        Assert.Equal(2, await fixture.Run("ABCD-1234-EF56\nn\nn\nn\n"));
         Assert.Equal(0, fixture.Installs); Assert.Equal(0, fixture.Activations);
         Assert.DoesNotContain("接入验证通过", fixture.Output.ToString());
         Assert.True(File.Exists(Path.Combine(fixture.WorkRoot, "state.json")));
-        Assert.Equal(0, await fixture.Run("n\ny\n"));
+        Assert.Equal(0, await fixture.Run("n\nn\ny\n"));
         Assert.Equal(1, fixture.Claims); Assert.Equal(1, fixture.Installs);
         Assert.Contains("已恢复上次安装请求", fixture.Output.ToString());
     }
@@ -59,7 +63,7 @@ public sealed class SetupCliTests
         using var fixture = new Fixture { LoseFirstClaimResponse = true };
         Assert.Equal(1, await fixture.Run("ABCD-1234-EF56\n"));
         Assert.Equal(0, fixture.Installs);
-        Assert.Equal(0, await fixture.Run("ABCD-1234-EF56\nn\ny\n"));
+        Assert.Equal(0, await fixture.Run("ABCD-1234-EF56\nn\nn\ny\n"));
         Assert.Equal(2, fixture.Claims);
         Assert.Equal(fixture.Requests[0], fixture.Requests[1]);
         Assert.Equal(1, fixture.Installs);
@@ -69,10 +73,10 @@ public sealed class SetupCliTests
     public async Task ResumingAReplacementRetainsThePreviousComputerWarning()
     {
         using var fixture = new Fixture { PreviousComputerName = "previous-computer" };
-        Assert.Equal(2, await fixture.Run("ABCD-1234-EF56\nn\nn\n"));
+        Assert.Equal(2, await fixture.Run("ABCD-1234-EF56\nn\nn\nn\n"));
         Assert.Equal("previous-computer", SetupPaths.Read<SetupUiState>(Path.Combine(fixture.WorkRoot, "state.json"))!.PreviousComputer);
         fixture.Output.GetStringBuilder().Clear();
-        Assert.Equal(2, await fixture.Run("n\nn\n"));
+        Assert.Equal(2, await fixture.Run("n\nn\nn\n"));
         Assert.Contains("当前监控电脑：previous-computer", fixture.Output.ToString());
         Assert.Contains("旧凭据届时失效", fixture.Output.ToString());
         Assert.Equal(0, fixture.Installs); Assert.Equal(1, fixture.Claims);
@@ -96,7 +100,7 @@ public sealed class SetupCliTests
     public async Task AnotherComputersCredentialCannotInstallOrActivate()
     {
         using var fixture = new Fixture { StatusComputerName = "different-computer" };
-        Assert.Equal(1, await fixture.Run("ABCD-1234-EF56\nn\ny\n"));
+        Assert.Equal(1, await fixture.Run("ABCD-1234-EF56\nn\nn\ny\n"));
         Assert.Equal(0, fixture.Installs); Assert.Equal(0, fixture.Activations);
         Assert.Contains("电脑名称与本机不一致", fixture.Output.ToString());
     }
@@ -107,7 +111,7 @@ public sealed class SetupCliTests
     public async Task StoppedServiceOrMissingSamplesCannotReportInstallationSuccess(bool stopped)
     {
         using var fixture = new Fixture { ServiceRunning = !stopped, FreshSamples = false };
-        Assert.Equal(1, await fixture.Run("ABCD-1234-EF56\nn\ny\n"));
+        Assert.Equal(1, await fixture.Run("ABCD-1234-EF56\nn\nn\ny\n"));
         Assert.Equal(1, fixture.Installs); Assert.Equal(0, fixture.Activations);
         Assert.DoesNotContain("接入验证通过", fixture.Output.ToString());
         Assert.True(File.Exists(Path.Combine(fixture.WorkRoot, "state.json")));
@@ -117,7 +121,7 @@ public sealed class SetupCliTests
     public async Task RevokedCredentialBeforeInstallationDoesNotChangeTheService()
     {
         using var fixture = new Fixture { RevokeBeforeInstall = true };
-        Assert.Equal(1, await fixture.Run("ABCD-1234-EF56\nn\ny\n"));
+        Assert.Equal(1, await fixture.Run("ABCD-1234-EF56\nn\nn\ny\n"));
         Assert.Equal(0, fixture.Installs); Assert.Equal(0, fixture.Activations);
         Assert.Contains("凭据已过期或撤销", fixture.Output.ToString());
         Assert.DoesNotContain("点击", fixture.Output.ToString());

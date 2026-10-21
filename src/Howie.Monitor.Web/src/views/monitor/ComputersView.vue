@@ -6,8 +6,10 @@ import type { ComputerSummary } from '../../types/monitor'
 import { capacity, number, uptime } from '../../utils/format'
 import { temperatureAvailable, temperatureGroups, temperatureReason } from '../../utils/temperatures'
 import { gpuUsageAvailable, gpuUsageLabel } from '../../utils/gpus'
+import AgentUpdateDialog from './components/AgentUpdateDialog.vue'
 
 const props = defineProps<{ computers: ComputerSummary[] }>()
+const updateTarget = ref<ComputerSummary | null>(null)
 defineEmits<{ open: [id: string, page: 'overview' | 'notifications']; enroll: []; remove: [computer: { deviceId: string; name: string }] }>()
 const query = ref(''), filter = ref('all'), layout = ref<'rail' | 'grid'>('rail'), rail = ref<HTMLElement | null>(null)
 const online = computed(() => props.computers.filter(computer => computer.connectionStatus === 'online').length)
@@ -42,11 +44,13 @@ const temperatures = (computer: ComputerSummary) => temperatureGroups(computer.t
       <dl class="fleet-temperatures"><div v-for="group in temperatures(computer)" :key="group.id" :title="temperatureAvailable(group.primary) ? group.hardware : temperatureReason(group)"><dt>{{ group.title }}<small v-if="group.primary">{{ group.hardware }}</small></dt><dd>{{ temperatureAvailable(group.primary) ? number(group.primary.value) + ' °C' : '—' }}</dd></div></dl>
       <div class="fleet-space"><span>{{ computer.lowestSpaceVolume ? computer.lowestSpaceVolume + ' 可用空间' : '可用空间' }}</span><strong>{{ computer.lowestSpaceBytes == null ? '—' : capacity(computer.lowestSpaceBytes) }}</strong></div>
       <p class="muted fleet-sampled">{{ computer.sampledAt ? '最后采样 ' + sampled(computer.sampledAt) : '尚无采样' }}</p>
+      <div class="fleet-version"><span :title="computer.build?.buildId || '旧版未提供构建标识'">采集端 {{ computer.agentVersion || '版本未知' }}<small v-if="computer.build"> · {{ computer.build.buildId.slice(0, 8) }}</small></span><ElButton link @click="updateTarget = computer">版本与升级</ElButton></div>
       <footer class="fleet-card-actions"><ElButton type="primary" @click="$emit('open', computer.deviceId, 'overview')">查看详情</ElButton><ElButton @click="$emit('open', computer.deviceId, 'notifications')">提醒规则</ElButton><ElButton type="danger" link class="fleet-remove" @click="$emit('remove', { deviceId: computer.deviceId, name: computer.name })">移除电脑</ElButton></footer>
     </article>
   </div>
   <div v-if="layout === 'rail' && filtered.length > 1" class="fleet-rail-footer"><span>左右浏览电脑</span><div class="rail-position" aria-hidden="true"><span :style="{ transform: `scaleX(${.12 + progress * .88})` }"/></div><span>{{ before ? '继续浏览' : '从这里开始' }} <span aria-hidden="true">→</span></span></div>
   <section v-if="!filtered.length" class="panel empty-state"><p>{{ computers.length ? '没有匹配的电脑' : '尚未接入电脑' }}</p><ElButton v-if="!computers.length" type="primary" @click="$emit('enroll')">添加第一台电脑</ElButton></section>
+  <AgentUpdateDialog :target="updateTarget" @close="updateTarget = null"/>
 </template>
 <style scoped>
 .fleet-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 16px }
@@ -91,6 +95,7 @@ dd { margin: 5px 0 0; font-family: var(--mono); font-variant-numeric: tabular-nu
 .fleet-space { display: flex; justify-content: space-between; gap: 14px; font-size: 12px; margin-top: 17px; padding-top: 14px; border-top: 1px solid var(--border) }
 .fleet-space strong { font-family: var(--mono) }
 .fleet-sampled { margin-top: 16px }
+.fleet-version { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 10px; color: var(--muted); font-size: 12px; margin-top: 8px }
 .fleet-card-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 17px }
 .fleet-card-actions :deep(.el-button + .el-button) { margin-left: 0 }
 .fleet-card-actions :deep(.fleet-remove.el-button) { margin-left: auto }

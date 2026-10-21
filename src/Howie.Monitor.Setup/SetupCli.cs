@@ -44,11 +44,11 @@ internal sealed class SetupCli
         在需要安装的 Windows 11 x64 电脑，以当前管理员账号打开 PowerShell：
           Start-Process -FilePath .\HowieMonitorSetup.exe -ArgumentList '--cli' -NoNewWindow -Wait
 
-        --cli         按提示绑定电脑、确认安装或修复、选择本账号终端授权
+        --cli         按提示绑定电脑、确认安装或修复、选择终端和面板升级授权
         --help        显示帮助（也支持 --cli --help）
         无参数        打开原图形安装向导
 
-        安装为开机自启的 Windows 服务，首次安装的管理员终端默认关闭。
+        安装为开机自启的 Windows 服务，首次安装的管理员终端和面板升级默认关闭。
         无需另装 .NET、Node.js 或 Python。绑定码在提示后输入，不放进命令参数。
         卸载待重启时先重启 Windows，CLI 不会删除标记或绕过清理检查。
         退出码：0 接入验证通过；1 安装或验证失败；2 未确认/参数错误；130 中止。
@@ -71,9 +71,12 @@ internal sealed class SetupCli
             bool previousAccess = plan.Configuration.Terminal is { Enabled: true } access && access.UserSid == _ownerSid;
             _output.WriteLine("管理员终端可修改这台电脑的文件和系统设置。只使用当前安装账号；注销后不可用，不保存 Windows 密码。");
             bool terminal = await Confirm("允许私人面板使用当前账号运行管理员 PowerShell", previousAccess, token);
-            plan = plan with { OwnerSid = _ownerSid, Configuration = plan.Configuration with { Terminal = terminal ? new(true, _ownerSid) : null } };
+            _output.WriteLine("面板升级仅接受本服务发布、经校验的采集端安装包；安装会重启采集服务，不开放任意命令执行。");
+            bool updates = await Confirm("允许从私人面板确认升级采集端", plan.Configuration.Updates is { Enabled: true }, token);
+            plan = plan with { OwnerSid = _ownerSid, Configuration = plan.Configuration with { Terminal = terminal ? new(true, _ownerSid) : null, Updates = new(updates) } };
             _output.WriteLine("安装位置：" + SetupPaths.ProgramRoot + "\n本地数据：" + SetupPaths.DataRoot);
             _output.WriteLine("服务开机自启，以 LocalSystem 采集硬件和进程指标，通过 HTTPS 上传私人面板。管理员终端：" + (terminal ? "允许当前账号" : "关闭"));
+            _output.WriteLine("允许面板升级：" + (updates ? "开启" : "关闭") + "。采集端版本：" + AgentBuild.Current.Version + " / " + AgentBuild.Current.BuildId);
             if (_previousComputer is not null)
                 _output.WriteLine("当前监控电脑：" + _previousComputer + "。本机通过真实采样验证并激活后才切换，旧凭据届时失效。");
             else _output.WriteLine("本次操作不会停止其他电脑的采集。");

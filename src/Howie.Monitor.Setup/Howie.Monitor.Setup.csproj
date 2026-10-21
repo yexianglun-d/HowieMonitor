@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWindowsForms>true</UseWindowsForms>
-    <Version>0.1.0</Version><AssemblyName>HowieMonitorSetup</AssemblyName><ApplicationManifest>app.manifest</ApplicationManifest>
+    <Version>$(MonitorVersion)</Version><AssemblyName>HowieMonitorSetup</AssemblyName><ApplicationManifest>app.manifest</ApplicationManifest>
     <Product>Howie Monitor</Product><Company>Howie Monitor contributors</Company>
     <Copyright>Copyright (c) 2026 Howie Monitor contributors</Copyright>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>

@@ -41,7 +41,8 @@ internal static class PackageContents
         if (!noticeArchive.Entries.Any(entry => entry.Name == "THIRD-PARTY-NOTICES.md")
             || !noticeArchive.Entries.Any(entry => entry.Name.StartsWith("microsoft.windowsdesktop.app-", StringComparison.Ordinal)))
             throw new InvalidOperationException("安装向导运行时许可不完整。");
-        return new { product = SetupPaths.Product, runtime = Environment.Version.ToString(), agentSha256 = PayloadHash,
+        return new { product = SetupPaths.Product, version = Howie.Monitor.Contracts.AgentBuild.Current.Version,
+            buildId = Howie.Monitor.Contracts.AgentBuild.Current.BuildId, updateProtocol = 1, runtime = Environment.Version.ToString(), agentSha256 = PayloadHash,
             agentFiles = archive.Entries.Count, noticeFiles = noticeArchive.Entries.Count, server = SetupPaths.ServerUrl };
     }
 

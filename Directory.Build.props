@@ -1,5 +1,7 @@
 <Project>
   <PropertyGroup>
+    <MonitorVersion>0.2.0</MonitorVersion>
+    <MonitorBuildId Condition="'$(MonitorBuildId)' == ''">development</MonitorBuildId>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
@@ -7,4 +9,8 @@
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <Deterministic>true</Deterministic>
   </PropertyGroup>
+  <ItemGroup>
+    <AssemblyMetadata Include="MonitorVersion" Value="$(MonitorVersion)" />
+    <AssemblyMetadata Include="MonitorBuildId" Value="$(MonitorBuildId)" />
+  </ItemGroup>
 </Project>

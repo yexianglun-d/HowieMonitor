@@ -100,6 +100,7 @@ app.UseAuthorization();
 app.UseRateLimiter();
 app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(10), KeepAliveTimeout = TimeSpan.FromSeconds(20) });
 TerminalEndpoints.Map(app, hosting, Csrf);
+AgentUpdateEndpoints.Map(app, Csrf);
 SetupBootstrap.Map(app, hosting);
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok" }));
 app.MapGet("/api/auth/session", (HttpContext context, CredentialStore credentials) =>

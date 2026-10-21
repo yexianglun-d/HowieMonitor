@@ -6,7 +6,8 @@ namespace Howie.Monitor.Contracts;
 public sealed record ProcessReading(int Pid, DateTimeOffset? StartedAt, string Name,
     double? CpuPercent, long? WorkingSetBytes, MetricStatus Status, string? Reason);
 public sealed record DeviceRegistration(string DeviceId, string Name, Inventory Inventory,
-    SensorEnvironment Sensors, string AgentVersion, string BootId, string SessionId);
+    SensorEnvironment Sensors, string AgentVersion, string BootId, string SessionId,
+    AgentBuild? Build = null, AgentUpdateCapability? Updates = null);
 public sealed record TelemetrySample(string DeviceId, string BootId, string SessionId, long Sequence,
     DateTimeOffset SampledAt, double UptimeSeconds, double CollectionMilliseconds,
     IReadOnlyList<MetricReading> Metrics, IReadOnlyList<ProcessReading> Processes,
@@ -28,7 +29,7 @@ public sealed record ComputerSummary(string DeviceId, string Name, string DataSt
     DateTimeOffset? SampledAt, DateTimeOffset? LastHeartbeat, double? CpuPercent, double? MemoryPercent,
     double? GpuPercent = null, double? UptimeSeconds = null, IReadOnlyList<MetricReading>? Temperatures = null,
     string? LowestSpaceVolume = null, double? LowestSpaceBytes = null, DateTimeOffset? ServerNow = null,
-    IReadOnlyList<GpuSummary>? Gpus = null);
+    IReadOnlyList<GpuSummary>? Gpus = null, string? AgentVersion = null, AgentBuild? Build = null);
 public sealed record HistoryBucketPoint(DateTimeOffset SampledAt, double? Value, double? Minimum, double? Maximum,
     long ValidSamples, long TotalSamples, double CoverageSeconds, DateTimeOffset? FirstSampleAt,
     DateTimeOffset? LastSampleAt, DateTimeOffset? PeakAt, SampleIdentity? Peak);

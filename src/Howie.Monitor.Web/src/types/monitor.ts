@@ -10,7 +10,7 @@ export interface Inventory {
   volumes: { id: string; fileSystem: string; sizeBytes: number | null; freeBytes: number | null; partitionIds: string[] }[]
   networks: { id: string; name: string; type: string; status: string }[]
 }
-export interface Device { deviceId: string; name: string; inventory: Inventory; sensors: { isAdministrator: boolean; pawnIoInstalled: boolean; pawnIoDeviceAccessible: boolean }; agentVersion: string }
+export interface Device { deviceId: string; name: string; inventory: Inventory; sensors: { isAdministrator: boolean; pawnIoInstalled: boolean; pawnIoDeviceAccessible: boolean }; agentVersion: string; build?: { version: string; buildId: string } | null; updates?: { protocol: number; enabled: boolean } | null }
 export interface Sample { deviceId: string; sessionId: string; sequence: number; sampledAt: string; uptimeSeconds: number; collectionMilliseconds: number; metrics: Metric[]; processes: ProcessReading[] }
 export interface Latest { sample: Sample | null; serverNow: string; receivedAt: string | null; lastHeartbeat: string | null; dataStatus: string; connectionStatus: string; agent: { queueLength: number; droppedSamples: number; lastError: string | null } | null }
 export interface HistoryPoint { sampledAt: string; value: number | null; maximum?: number | null; coverageSeconds?: number }
@@ -35,4 +35,5 @@ export interface ComputerSummary {
   cpuPercent: number | null; memoryPercent: number | null; gpuPercent?: number | null; uptimeSeconds?: number | null
   temperatures?: Metric[] | null; lowestSpaceVolume?: string | null; lowestSpaceBytes?: number | null; serverNow?: string | null
   gpus?: GpuSummary[] | null
+  agentVersion?: string | null; build?: { version: string; buildId: string; updateProtocol: number } | null
 }

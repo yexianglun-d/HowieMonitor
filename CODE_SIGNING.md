@@ -10,7 +10,7 @@ The initial requested signing scope is the project's own `HowieMonitorSetup.exe`
 
 ## Source, build and approval
 
-Only artifacts built from this public repository on GitHub-hosted Windows runners may be submitted. The workflow records the source revision, runs project tests and package checks, uploads the exact unsigned installer to GitHub Actions, and passes that artifact identity to SignPath for origin verification. Product name is `Howie Monitor`; product version is `0.1.0` for this version.
+Only artifacts built from this public repository on GitHub-hosted Windows runners may be submitted. The workflow records the source revision, runs project tests and package checks, uploads the exact unsigned installer to GitHub Actions, and passes that artifact identity to SignPath for origin verification. Product name is `Howie Monitor`; product version comes from `MonitorVersion` in `Directory.Build.props`, with the Git commit recorded separately in the agent and installer. The signing configuration restricts both product version and file version using that release's version parameter. The matching update manifest is uploaded separately, so the signing input remains exactly one EXE.
 
 Untrusted contributions require maintainer review. Signing is a manually requested workflow operation and also requires a SignPath approver to review the specific request. The signing workflow must run from the default branch; it does not sign arbitrary uploaded files. All maintainers with source or signing access must enable multi-factor authentication. Signing secrets belong in GitHub Actions secrets, never in source or release archives.
 
@@ -19,6 +19,8 @@ Author and reviewer: [yexianglun-d](https://github.com/yexianglun-d), the reposi
 ## Release verification
 
 After signing, `scripts/verify-signed-setup.ps1` must check Windows signature validity, the expected SignPath Foundation publisher and timestamp, unchanged product metadata and embedded agent payload, and the installer's read-only `--check-package` result. SHA-256 is calculated from the returned signed executable. An unsigned artifact must remain labeled unsigned. No signed release is published automatically by this workflow.
+
+The returned signed EXE has a different hash and size. Verification therefore produces a new `.release.json` beside it, preserving the original source/build/payload identity while recording the returned bytes. Deploy that matching pair for dashboard upgrades. An unsigned package's manifest cannot be reused with the signed file. SHA-256 and HTTPS alone do not establish a signing identity. The version substitution follows [SignPath's artifact configuration syntax](https://docs.signpath.io/artifact-configuration/syntax).
 
 Code signing identifies a publisher and detects changes to the signed file. It does not promise that Windows SmartScreen or security products will never display a warning.
 

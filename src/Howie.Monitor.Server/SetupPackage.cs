@@ -1,4 +1,6 @@
 using System.Security.Cryptography;
+using System.Text.Json;
+using Howie.Monitor.Contracts;
 
 namespace Howie.Monitor.Server;
 
@@ -15,14 +17,34 @@ public sealed class SetupPackage(string path)
         lock (_gate)
         {
             var file = new FileInfo(Path);
-            if (!file.Exists) return new(false, "0.1.0", null, null, null);
+            if (!file.Exists) return new(false, "未标记", null, null, null);
             if (_hash is null || file.LastWriteTimeUtc != _lastWrite || file.Length != _length)
             {
                 using var stream = file.OpenRead(); _hash = Convert.ToHexString(SHA256.HashData(stream));
                 _lastWrite = file.LastWriteTimeUtc; _length = file.Length;
             }
-            return new(true, "0.1.0", "HowieMonitorSetup.exe", file.Length, _hash);
+            var release = ReadRelease(_hash, file.Length);
+            return new(true, release?.Version ?? "未标记", "HowieMonitorSetup.exe", file.Length, _hash);
         }
+    }
+    public AgentRelease? Release()
+    {
+        lock (_gate)
+        {
+            var info = Info();
+            return info.Sha256 is not null && info.Bytes.HasValue ? ReadRelease(info.Sha256, info.Bytes.Value) : null;
+        }
+    }
+    private AgentRelease? ReadRelease(string hash, long bytes)
+    {
+        string manifest = Path + ".release.json";
+        try
+        {
+            if (!File.Exists(manifest) || new FileInfo(manifest).Length > 4096) return null;
+            var release = JsonSerializer.Deserialize<AgentRelease>(File.ReadAllText(manifest), ProtocolJson.Options);
+            return release is { Valid: true } && release.Bytes == bytes && string.Equals(release.Sha256, hash, StringComparison.OrdinalIgnoreCase) ? release : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { return null; }
     }
     public FileStream? OpenVerified(string sha256)
     {

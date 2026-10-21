@@ -126,7 +126,10 @@ public sealed partial class TelemetryStore
             using var db = Open(); var actor = Authorize(db, authorization, now);
             if (actor is null) return (false, null);
             if (device.DeviceId != actor.DeviceId || !Guid.TryParse(device.SessionId, out _) || device.BootId?.Length is not (> 0 and <= 128)
-                || device.Name?.Length is not (> 0 and <= 128) || device.Name.Any(char.IsControl) || device.Inventory is null || device.Sensors is null)
+                || device.Name?.Length is not (> 0 and <= 128) || device.Name.Any(char.IsControl) || device.Inventory is null || device.Sensors is null
+                || device.AgentVersion?.Length is not (> 0 and <= 64)
+                || device.Build is { } build && (build.Version != device.AgentVersion || build.BuildId?.Length is not (> 0 and <= 64) || build.UpdateProtocol != 1)
+                || device.Updates is { } updates && (updates.Protocol != 1 || device.Build is not { IsRelease: true }))
                 return (true, "设备信息不正确。");
             if (actor.Candidate)
             {

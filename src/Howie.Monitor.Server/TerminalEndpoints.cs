@@ -23,6 +23,8 @@ public static class TerminalEndpoints
             IResult response = Results.NotFound(new { error = "目标电脑不存在或正在移除。" });
             telemetry.WithComputer(request.ComputerId, _ =>
             {
+                if (telemetry.HasActiveUpdate(request.ComputerId))
+                { response = Results.Conflict(new { error = "这台电脑正在升级，暂不能建立终端。" }); return; }
                 var result = broker.Create(request.ComputerId, context.User.FindFirstValue("stamp")!, request.Columns, request.Rows, DateTimeOffset.UtcNow);
                 response = result.Session is null ? Results.Conflict(new { error = result.Error })
                     : Results.Ok(new TerminalSessionCreated(result.Session.Id, result.Session.ConnectBefore));

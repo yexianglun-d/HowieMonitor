@@ -18,6 +18,7 @@ public sealed partial class TelemetryStore
             PRAGMA journal_mode=WAL;
             CREATE TABLE IF NOT EXISTS device(id TEXT PRIMARY KEY, registration TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS computer_removals(device TEXT PRIMARY KEY);
+            CREATE TABLE IF NOT EXISTS agent_updates(device TEXT PRIMARY KEY,payload TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS samples(session TEXT NOT NULL, sequence INTEGER NOT NULL,
                 sampled INTEGER NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(session,sequence));
             CREATE INDEX IF NOT EXISTS ix_samples_time ON samples(sampled);

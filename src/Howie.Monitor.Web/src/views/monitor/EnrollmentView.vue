@@ -40,7 +40,7 @@ async function generateCode() { replacing.value = false; await generate(); now.v
   <template v-if="overview">
     <section class="panel enrollment-step" data-scroll-section="下载安装"><div class="step-content"><div class="panel-heading"><div><h2>安装采集端</h2><p>Windows 11 x64 · 无需另装 .NET</p></div><span class="step-number" aria-hidden="true">01</span></div>
       <template v-if="download?.available && download.installCommand"><p class="muted">以管理员身份打开 PowerShell，运行命令后按提示输入绑定码。</p><div class="uninstall-command"><code>{{ download.installCommand }}</code><ElButton type="primary" @click="copyInstallCommand">复制安装命令</ElButton></div><p class="footnote">自动下载并校验安装包，再确认安装与终端授权。也可直接下载安装程序。</p></template>
-      <div v-if="download?.available" class="notification-actions"><ElButton tag="a" href="/api/setup/download" type="primary">下载安装程序</ElButton><span class="muted">v{{ download.version }} · {{ capacity(download.bytes) }}</span></div>
+      <div v-if="download?.available" class="notification-actions"><ElButton tag="a" href="/api/setup/download" type="primary">下载安装程序</ElButton><span class="muted">{{ download.version === '未标记' ? '版本未标记' : 'v' + download.version }} · {{ capacity(download.bytes) }}</span></div>
       <div v-else class="info-banner"><span>服务端尚未提供安装包。</span><ElButton type="primary" link @click="refresh">刷新检查</ElButton></div>
       <ElCollapse class="help-details"><ElCollapseItem title="安装说明与校验" name="details"><p>向导会检查环境、绑定电脑、安装后台服务并验证首次上报。管理员权限用于安装服务；已安装电脑升级时保留身份与历史。</p><template v-if="download?.sha256"><p>当前包未签名，请从本页面下载并核对来源。</p><p class="enrollment-hash">SHA-256: {{ download.sha256 }}</p></template></ElCollapseItem></ElCollapse>
     </div></section>

@@ -96,7 +96,7 @@ public sealed partial class TelemetryStore
                 return new ComputerSummary(device.DeviceId, device.Name, view.DataStatus, view.ConnectionStatus,
                     view.Sample?.SampledAt, view.LastHeartbeat, Metric("cpu.usage"), Metric("memory.usage"), gpuPercent,
                     view.DataStatus == "fresh" ? view.Sample?.UptimeSeconds : null,
-                    metrics.Where(value => value.Unit == "°C").ToArray(), volume?.DeviceId, volume?.Value, now, gpus);
+                    metrics.Where(value => value.Unit == "°C").ToArray(), volume?.DeviceId, volume?.Value, now, gpus, device.AgentVersion, device.Build);
             }).ToArray();
         }
     }

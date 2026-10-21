@@ -5,7 +5,7 @@
   </parameters>
   <zip-file>
     <pe-file path="HowieMonitorSetup.exe" product-name="Howie Monitor"
-             product-version="${version}" file-version="0.1.0.0"
+             product-version="${version}" file-version="${version}.0"
              company-name="Howie Monitor contributors">
       <authenticode-sign />
     </pe-file>

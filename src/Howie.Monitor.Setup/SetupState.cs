@@ -7,7 +7,7 @@ namespace Howie.Monitor.Setup;
 
 public sealed record LegacyAgent(int ProcessId, DateTimeOffset StartedAt, string Executable, string ConfigurationFile);
 public sealed record InstallPlan(AgentConfiguration Configuration, string? RequestId, string OwnerSid, LegacyAgent? Legacy);
-public sealed record InstallMarker(string Product, string Version, string AgentPath, string OwnerSid, string? RequestId);
+public sealed record InstallMarker(string Product, string Version, string AgentPath, string OwnerSid, string? RequestId, AgentBuild? Build = null);
 internal sealed record SetupUiState(string ComputerName, InstallPlan Plan, string? PreviousComputer, DateTimeOffset? ExpiresAt = null);
 internal sealed record ClaimAttempt(string ComputerName, string CodeHash, string RequestId);
 

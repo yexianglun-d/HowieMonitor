@@ -3,7 +3,13 @@ $ErrorActionPreference = 'Stop'
 $taskRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $taskOutput = [IO.Path]::GetFullPath($OutputRoot)
 $taskBuild = Join-Path $taskRoot '.local\deployment-build'
-$taskVersion = '0.1.0'
+[xml]$taskBuildProperties = Get-Content -LiteralPath (Join-Path $taskRoot 'Directory.Build.props') -Raw
+$taskVersion = [string]$taskBuildProperties.Project.PropertyGroup.MonitorVersion
+if ($taskVersion -notmatch '^\d+\.\d+\.\d+$') { throw 'MonitorVersion 必须为三段数字版本。' }
+$taskRevision = (& git -C $taskRoot rev-parse HEAD | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or $taskRevision -notmatch '^[a-f0-9]{40}$') { throw '无法确定发布源码提交。' }
+$taskChanges = (& git -C $taskRoot status --porcelain | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or $taskChanges) { throw '正式发布必须使用干净且已提交的源码，避免版本标识与安装载荷不一致。' }
 $taskTimestamp = [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss')
 
 function Write-PackageNotices([string]$ProjectName, [string]$Destination, [string]$Runtime) {
@@ -81,13 +87,14 @@ try {
         if ((Test-Path -LiteralPath $taskDirectory) -or (Test-Path -LiteralPath $taskArchive)) { throw '发布路径已存在，请使用新的输出位置。' }
         $taskProject = Join-Path $taskRoot ("src\$($taskTarget.Name)\$($taskTarget.Name).csproj")
         & dotnet publish $taskProject -c Release -r $taskTarget.Runtime --self-contained true --artifacts-path $taskBuild `
-            -p:PublishSingleFile=false -p:PublishTrimmed=false -p:RestoreLockedMode=true -o $taskDirectory
+            -p:PublishSingleFile=false -p:PublishTrimmed=false -p:RestoreLockedMode=true "-p:MonitorBuildId=$taskRevision" -o $taskDirectory
         if ($LASTEXITCODE -ne 0) { throw "发布失败：$LASTEXITCODE" }
         Write-PackageNotices $taskTarget.Name $taskDirectory $taskTarget.Runtime
         if ($PublicRelease) {
             $taskDocs = Join-Path $taskDirectory 'docs'
             [IO.Directory]::CreateDirectory($taskDocs) | Out-Null
             Copy-Item -LiteralPath (Join-Path $taskRoot 'docs\terminal-acceptance.md') -Destination $taskDocs
+            Copy-Item -LiteralPath (Join-Path $taskRoot 'docs\agent-updates.md') -Destination $taskDocs
             foreach ($taskDocument in @('PRIVACY.md', 'CODE_SIGNING.md', 'BUILDING.md')) {
                 Copy-Item -LiteralPath (Join-Path $taskRoot $taskDocument) -Destination $taskDirectory
             }
@@ -126,7 +133,7 @@ try {
     Compress-Archive -Path (Join-Path $taskNoticeDirectory '*') -DestinationPath $taskNoticeArchive
     & dotnet publish $taskSetupProject -c Release -r win-x64 --self-contained true --artifacts-path $taskBuild `
         -p:PublishTrimmed=false -p:RestoreLockedMode=true `
-        "-p:SetupPayload=$taskAgentArchive" "-p:SetupPayloadHash=$taskAgentHash" "-p:SetupNotices=$taskNoticeArchive" -o $taskSetupDirectory
+        "-p:MonitorBuildId=$taskRevision" "-p:SetupPayload=$taskAgentArchive" "-p:SetupPayloadHash=$taskAgentHash" "-p:SetupNotices=$taskNoticeArchive" -o $taskSetupDirectory
     if ($LASTEXITCODE -ne 0) { throw "安装向导发布失败：$LASTEXITCODE" }
     $taskSetupExe = Join-Path $taskSetupDirectory 'HowieMonitorSetup.exe'
     $taskCheckStart = [Diagnostics.ProcessStartInfo]::new($taskSetupExe)
@@ -141,7 +148,8 @@ try {
     $taskCheckResult = $taskCheckOutput.GetAwaiter().GetResult() | ConvertFrom-Json
     $taskCheckError.GetAwaiter().GetResult() | Out-Null
     $taskCheckProcess.Dispose()
-    if ($taskCheckResult.runtime -ne '10.0.12' -or $taskCheckResult.agentSha256 -ne $taskAgentHash) { throw '安装包运行时或采集载荷不一致。' }
+    if ($taskCheckResult.runtime -ne '10.0.12' -or $taskCheckResult.agentSha256 -ne $taskAgentHash `
+        -or $taskCheckResult.version -ne $taskVersion -or $taskCheckResult.buildId -ne $taskRevision) { throw '安装包运行时、版本或采集载荷不一致。' }
     $taskCheckStart.ArgumentList.Clear()
     $taskCheckStart.ArgumentList.Add('--cli')
     $taskCheckStart.ArgumentList.Add('--help')
@@ -160,5 +168,7 @@ try {
     } finally { $taskCliProcess.Dispose() }
     $taskSetupHash = (Get-FileHash -LiteralPath $taskSetupExe -Algorithm SHA256).Hash
     [IO.File]::WriteAllText(($taskSetupExe + '.sha256'), ($taskSetupHash + '  HowieMonitorSetup.exe'), [Text.UTF8Encoding]::new($false))
+    $taskRelease = @{ version = $taskVersion; buildId = $taskRevision; protocol = 1; payloadSha256 = $taskAgentHash; sha256 = $taskSetupHash; bytes = (Get-Item -LiteralPath $taskSetupExe).Length }
+    [IO.File]::WriteAllText(($taskSetupExe + '.release.json'), ($taskRelease | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
     [pscustomobject]@{ Platform = 'Windows Setup'; Directory = $taskSetupDirectory; Archive = $taskSetupExe; Sha256 = $taskSetupHash; Verification = $taskCheckResult }
 } finally { Pop-Location }

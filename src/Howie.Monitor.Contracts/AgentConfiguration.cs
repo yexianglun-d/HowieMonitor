@@ -1,4 +1,4 @@
 namespace Howie.Monitor.Contracts;
 
 public sealed record AgentConfiguration(string ServerUrl, string DeviceId, string Token, string DataDirectory, bool LocalDevelopment,
-    TerminalAccess? Terminal = null);
+    TerminalAccess? Terminal = null, AgentUpdateAccess? Updates = null);

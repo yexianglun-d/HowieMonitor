@@ -21,6 +21,8 @@ defineEmits<{ enroll: []; select: [metric: Metric]; temperatures: [] }>()
       <template #header><h2>采集端</h2></template>
       <ElDescriptions :column="1" border>
         <ElDescriptionsItem label="版本">{{ device.agentVersion }}</ElDescriptionsItem>
+        <ElDescriptionsItem label="构建"><span class="build-id">{{ device.build?.buildId || '旧版未提供' }}</span></ElDescriptionsItem>
+        <ElDescriptionsItem label="面板升级">{{ device.updates ? device.updates.enabled ? '已在本机授权' : '未在本机开启' : '需先在本机更新采集端' }}</ElDescriptionsItem>
         <ElDescriptionsItem label="权限"><ElTag disable-transitions type="info" effect="plain">{{ device.sensors.isAdministrator ? '管理员' : '普通权限' }}</ElTag></ElDescriptionsItem>
         <ElDescriptionsItem label="传感器"><ElTag disable-transitions :type="device.sensors.pawnIoDeviceAccessible ? 'success' : 'warning'" effect="plain">{{ device.sensors.pawnIoDeviceAccessible ? '可访问' : '部分不可访问' }}</ElTag></ElDescriptionsItem>
       </ElDescriptions>
@@ -42,3 +44,6 @@ defineEmits<{ enroll: []; select: [metric: Metric]; temperatures: [] }>()
   </template>
   <ElCard v-else class="welcome-state" shadow="never"><ElEmpty description="接入电脑后显示处理器、显卡和存储信息。"><ElButton type="primary" @click="$emit('enroll')">查看接入步骤</ElButton></ElEmpty></ElCard>
 </template>
+<style scoped>
+.build-id { font: 11px/1.7 var(--mono); overflow-wrap: anywhere }
+</style>

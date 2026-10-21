@@ -24,7 +24,7 @@ public static class InstallEngine
             throw new InvalidOperationException("同名服务与本产品安装路径不一致，未修改该服务。");
         return marker;
     }
-    public static async Task Apply(InstallPlan plan, string setupExecutable, CancellationToken cancellationToken)
+    public static async Task Apply(InstallPlan plan, string setupExecutable, CancellationToken cancellationToken, bool controlledUpdate = false)
     {
         if (!SetupPaths.IsAdministrator) throw new InvalidOperationException("安装需要管理员授权。");
         SetupPaths.ValidateConfiguration(plan.Configuration);
@@ -42,10 +42,12 @@ public static class InstallEngine
             throw new InvalidOperationException("安装目录已有其他内容，未覆盖。");
         string hash = PackageContents.PayloadHash;
         using var payload = PackageContents.OpenPayload();
-        string versionRoot = Path.Combine(SetupPaths.ProgramRoot, "versions", "0.1.0-" + hash[..12]);
+        string versionRoot = Path.Combine(SetupPaths.ProgramRoot, "versions", AgentBuild.Current.Version + "-" + hash[..12]);
         SetupPaths.VerifyPath(Path.Combine(versionRoot, "Howie.Monitor.Agent.exe"), SetupPaths.ProgramRoot);
         SetupPaths.PrivateDirectory(Path.GetDirectoryName(SetupPaths.DataRoot)!, plan.OwnerSid, false);
+        using var installLock = controlledUpdate ? null : AcquireLock();
         SetupPaths.PrivateDirectory(SetupPaths.DataRoot, plan.OwnerSid, false);
+        SetupPaths.PrivateDirectory(AgentUpdateFiles.Root, plan.OwnerSid, false);
         SetupPaths.Write(dataMarker, new Dictionary<string, string> { ["product"] = SetupPaths.Product });
         Directory.CreateDirectory(SetupPaths.ProgramRoot);
         SetupPaths.VerifyPath(SetupPaths.ConfigurationFile, SetupPaths.DataRoot);
@@ -59,6 +61,7 @@ public static class InstallEngine
             string? prefix = null;
             foreach (var entry in archive.Entries)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (((entry.ExternalAttributes >> 16) & 0xF000) == 0xA000) throw new InvalidOperationException("安装载荷包含文件链接。");
                 var parts = entry.FullName.Replace('\\', '/').Split('/');
                 if (parts.Any(part => part == "..") || parts[0].Length == 0 || parts.Any(part => part.Contains(':'))) throw new InvalidOperationException("安装载荷路径无效。");
@@ -81,7 +84,7 @@ public static class InstallEngine
                 savedQueue = backup; oldQueue = old.DataDirectory;
             }
             SetupPaths.Write(SetupPaths.ConfigurationFile, configuration);
-            var marker = new InstallMarker(SetupPaths.Product, "0.1.0", agent, plan.OwnerSid, plan.RequestId);
+            var marker = new InstallMarker(SetupPaths.Product, AgentBuild.Current.Version, agent, plan.OwnerSid, plan.RequestId, AgentBuild.Current);
             SetupPaths.Write(SetupPaths.MarkerFile, marker);
             var args = new[] { serviceExisted ? "config" : "create", SetupPaths.ServiceName, "binPath=", ServiceCommand(agent), "start=", "auto", "obj=", "LocalSystem", "DisplayName=", "Howie Monitor Agent" };
             await Sc(args, cancellationToken);
@@ -92,9 +95,15 @@ public static class InstallEngine
                 await Task.Run(() => started.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(30)), cancellationToken);
             if (!Path.GetFullPath(setupExecutable).Equals(SetupPaths.InstalledSetup, StringComparison.OrdinalIgnoreCase)) File.Copy(setupExecutable, SetupPaths.InstalledSetup, true);
             using var key = Registry.LocalMachine.CreateSubKey(UninstallKey);
-            key.SetValue("DisplayName", "Howie Monitor 采集端"); key.SetValue("DisplayVersion", "0.1.0"); key.SetValue("Publisher", "Howie Monitor");
+            key.SetValue("DisplayName", "Howie Monitor 采集端"); key.SetValue("DisplayVersion", AgentBuild.Current.Version); key.SetValue("Publisher", "Howie Monitor");
             key.SetValue("InstallLocation", SetupPaths.ProgramRoot); key.SetValue("UninstallString", $"\"{SetupPaths.InstalledSetup}\" --uninstall");
             key.SetValue("NoModify", 1); key.SetValue("NoRepair", 0);
+            if (!controlledUpdate && AgentUpdateFiles.Read<AgentUpdateJournal>(AgentUpdateFiles.Journal) is { } journal)
+            {
+                if (journal.Ticket.DeviceId == configuration.DeviceId)
+                    AgentUpdateFiles.Write(AgentUpdateFiles.Journal, journal with { Phase = "repaired", Message = "已在本机重新安装，请等待新会话上报。", HelperPid = null, HelperStartedAt = null });
+                else File.Move(AgentUpdateFiles.Journal, AgentUpdateFiles.Journal + ".before-rebind-" + Guid.NewGuid().ToString("N"));
+            }
         }
         catch
         {
@@ -122,6 +131,26 @@ public static class InstallEngine
             throw;
         }
     }
+    internal static FileStream AcquireLock()
+    {
+        string path = Path.Combine(Path.GetDirectoryName(SetupPaths.DataRoot)!, "install.lock");
+        SetupPaths.VerifyPath(path, Path.GetDirectoryName(SetupPaths.DataRoot)!);
+        try { return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
+        catch (IOException ex) { throw new InvalidOperationException("另一项安装、升级或卸载正在进行，请稍后重试。", ex); }
+    }
+    internal static async Task RestoreUpdate(InstallMarker marker, AgentConfiguration configuration, string setupBackup)
+    {
+        SetupPaths.VerifyPath(marker.AgentPath, SetupPaths.ProgramRoot);
+        SetupPaths.ValidateConfiguration(configuration);
+        if (!File.Exists(marker.AgentPath)) throw new InvalidOperationException("原采集程序不存在，需本机修复。");
+        await Stop(CancellationToken.None);
+        SetupPaths.Write(SetupPaths.ConfigurationFile, configuration); SetupPaths.Write(SetupPaths.MarkerFile, marker);
+        await Sc(["config", SetupPaths.ServiceName, "binPath=", ServiceCommand(marker.AgentPath)], CancellationToken.None);
+        SetupPaths.VerifyPath(SetupPaths.InstalledSetup, SetupPaths.ProgramRoot);
+        File.Copy(setupBackup, SetupPaths.InstalledSetup, true);
+        using var key = Registry.LocalMachine.CreateSubKey(UninstallKey); key.SetValue("DisplayVersion", marker.Version);
+        await Sc(["start", SetupPaths.ServiceName], CancellationToken.None);
+    }
     public static async Task Stop(CancellationToken cancellationToken)
     {
         using var service = new ServiceController(SetupPaths.ServiceName);
@@ -142,6 +171,7 @@ public static class InstallEngine
     {
         if (!SetupPaths.IsAdministrator) throw new InvalidOperationException("卸载需要管理员授权。");
         var marker = Existing() ?? throw new InvalidOperationException("未找到本产品安装，未删除任何文件。");
+        using var installLock = AcquireLock();
         await Stop(cancellationToken);
         using (var serviceKey = Registry.LocalMachine.OpenSubKey("SYSTEM\\CurrentControlSet\\Services\\" + SetupPaths.ServiceName))
             if (serviceKey is not null) await Sc(["delete", SetupPaths.ServiceName], cancellationToken);

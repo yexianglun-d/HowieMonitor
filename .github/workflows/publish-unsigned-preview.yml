@@ -6,11 +6,9 @@ on:
       build_run_id:
         description: Successful Windows installer build run
         required: true
-        default: '39024676654'
       source_commit:
         description: Exact source revision of that build
         required: true
-        default: 'a18f6c9f3861b1767bed16b4978006dba5366f49'
 
 permissions:
   contents: write
@@ -28,7 +26,6 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       BUILD_RUN_ID: ${{ inputs.build_run_id }}
       SOURCE_COMMIT: ${{ inputs.source_commit }}
-      RELEASE_TAG: v0.1.0-unsigned
     steps:
       - name: Verify the source build
         shell: pwsh
@@ -46,14 +43,26 @@ jobs:
           github-token: ${{ github.token }}
           path: preview
           digest-mismatch: error
+      - name: Download the matching release manifest
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: howie-monitor-update-manifest-${{ inputs.build_run_id }}
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ github.token }}
+          path: update-manifest
+          digest-mismatch: error
       - name: Check the package and publish a clearly unsigned preview
         shell: pwsh
         run: |
           $setup = (Resolve-Path preview/HowieMonitorSetup.exe).Path
           if ((Get-ChildItem preview -File -Recurse).Count -ne 1) { throw 'Unexpected artifact contents.' }
+          $manifestPath = (Resolve-Path update-manifest/HowieMonitorSetup.exe.release.json).Path
+          $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+          if ($manifest.version -notmatch '^\d+\.\d+\.\d+$' -or $manifest.buildId -ne $env:SOURCE_COMMIT -or $manifest.protocol -ne 1) { throw 'Release manifest source mismatch.' }
+          $tag = 'v' + $manifest.version + '-unsigned'
           if ((Get-AuthenticodeSignature -LiteralPath $setup).Status -ne 'NotSigned') { throw 'This workflow publishes unsigned previews only.' }
           $version = [Diagnostics.FileVersionInfo]::GetVersionInfo($setup)
-          if ($version.ProductName -ne 'Howie Monitor' -or $version.ProductVersion -ne '0.1.0') { throw 'Product metadata mismatch.' }
+          if ($version.ProductName -ne 'Howie Monitor' -or $version.ProductVersion -ne $manifest.version) { throw 'Product metadata mismatch.' }
           $start = [Diagnostics.ProcessStartInfo]::new($setup)
           $start.UseShellExecute = $false; $start.CreateNoWindow = $true
           $start.RedirectStandardOutput = $true; $start.RedirectStandardError = $true
@@ -66,13 +75,15 @@ jobs:
           $process.Dispose()
           if ($check.runtime -ne '10.0.12' -or $check.agentSha256 -notmatch '^[0-9A-F]{64}$' -or $check.product -ne 'HowieMonitor-93746211-9989-4cef-9d88-07870b3f35dd') { throw 'Package identity mismatch.' }
           $hash = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash
+          if ($check.version -ne $manifest.version -or $check.buildId -ne $manifest.buildId -or $check.agentSha256 -ne $manifest.payloadSha256 `
+              -or $manifest.sha256 -ne $hash -or $manifest.bytes -ne (Get-Item -LiteralPath $setup).Length) { throw 'Manifest or payload mismatch.' }
           [IO.File]::WriteAllText(($setup + '.sha256'), ($hash + "  HowieMonitorSetup.exe`n"), [Text.UTF8Encoding]::new($false))
           $body = @"
           This is an **unsigned early preview**. No SignPath Foundation approval or signing certificate has been received.
 
           Built from $env:SOURCE_COMMIT on GitHub-hosted Windows runners: https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:BUILD_RUN_ID
 
-          The build passed 115 .NET tests, 15 Python tests, the browser build and installer payload checks. Real installation, service maintenance, reboot and long-running acceptance tests remain pending.
+          The source build completed the checks recorded in the linked workflow. Real installation, service maintenance, reboot and long-running acceptance tests remain pending.
 
           The official installer connects to the private service https://monitor.howied.me/ and requires its operator's pairing code. Review the repository's PRIVACY.md before use. The installer does not install sensor drivers.
 
@@ -80,18 +91,21 @@ jobs:
 
           Free code signing is being requested from SignPath Foundation. This statement does not mean it is approved or signed. Code signing policy: https://github.com/$env:GITHUB_REPOSITORY/blob/main/CODE_SIGNING.md
           "@
-          $request = @{ tag_name = $env:RELEASE_TAG; target_commitish = $env:SOURCE_COMMIT; name = 'Howie Monitor 0.1.0 — unsigned preview'; body = $body; draft = $true; prerelease = $true; make_latest = 'false' }
+          $request = @{ tag_name = $tag; target_commitish = $env:SOURCE_COMMIT; name = ('Howie Monitor ' + $manifest.version + ' — unsigned preview'); body = $body; draft = $true; prerelease = $true; make_latest = 'false' }
           $request | ConvertTo-Json | Set-Content release.json -Encoding utf8
           $releaseJson = gh api --method POST "repos/$env:GITHUB_REPOSITORY/releases" --input release.json
           if ($LASTEXITCODE -ne 0) { throw 'Could not create a new release draft; existing releases were not overwritten.' }
           $release = $releaseJson | ConvertFrom-Json
-          gh release upload $env:RELEASE_TAG $setup ($setup + '.sha256') --repo $env:GITHUB_REPOSITORY
+          gh release upload $tag $setup ($setup + '.sha256') $manifestPath --repo $env:GITHUB_REPOSITORY
           if ($LASTEXITCODE -ne 0) { throw 'Asset upload failed; release stays a draft.' }
           $assetsJson = gh api "repos/$env:GITHUB_REPOSITORY/releases/$($release.id)/assets"
           if ($LASTEXITCODE -ne 0) { throw 'Cannot verify draft assets.' }
           $assets = @($assetsJson | ConvertFrom-Json)
           $installer = @($assets | Where-Object name -eq 'HowieMonitorSetup.exe')
-          if ($assets.Count -ne 2 -or $installer.Count -ne 1 -or $installer[0].digest -ne ('sha256:' + $hash.ToLowerInvariant())) { throw 'Uploaded installer digest mismatch; release stays a draft.' }
+          $metadata = @($assets | Where-Object name -eq 'HowieMonitorSetup.exe.release.json')
+          $metadataHash = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($assets.Count -ne 3 -or $installer.Count -ne 1 -or $installer[0].digest -ne ('sha256:' + $hash.ToLowerInvariant()) `
+              -or $metadata.Count -ne 1 -or $metadata[0].digest -ne ('sha256:' + $metadataHash)) { throw 'Uploaded package digest mismatch; release stays a draft.' }
           '{"draft":false}' | Set-Content publish.json -Encoding utf8
           $publishedJson = gh api --method PATCH "repos/$env:GITHUB_REPOSITORY/releases/$($release.id)" --input publish.json
           if ($LASTEXITCODE -ne 0) { throw 'Could not publish the verified draft.' }

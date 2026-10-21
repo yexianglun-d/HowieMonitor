@@ -24,8 +24,10 @@ using var bootRow = bootRows.Cast<ManagementObject>().First();
 string bootId = ManagementDateTimeConverter.ToDateTime((string)bootRow["LastBootUpTime"]).ToUniversalTime().Ticks.ToString();
 var inventory = InventoryReader.Read();
 var sensors = InventoryReader.ReadSensorEnvironment();
+bool updatesAvailable = UpdateWorker.Eligible(configurationFile, configuration);
 var state = new AgentState(configuration, new(configuration.DeviceId, Environment.MachineName, inventory,
-    sensors, "0.1.0", bootId, Guid.NewGuid().ToString()));
+    sensors, AgentBuild.Current.Version, bootId, Guid.NewGuid().ToString(), AgentBuild.Current,
+    AgentBuild.Current.IsRelease ? new(1, updatesAvailable) : null));
 builder.Services.AddWindowsService(options => options.ServiceName = "HowieMonitorAgent");
 builder.Logging.AddFilter("Microsoft", LogLevel.Warning);
 builder.Services.AddSingleton(state);
@@ -35,4 +37,5 @@ builder.Services.AddSingleton(new HttpClient(new HttpClientHandler { AllowAutoRe
 builder.Services.AddHostedService<CollectionWorker>();
 builder.Services.AddHostedService<UploadWorker>();
 builder.Services.AddHostedService<TerminalWorker>();
+builder.Services.AddHostedService<UpdateWorker>();
 await builder.Build().RunAsync();

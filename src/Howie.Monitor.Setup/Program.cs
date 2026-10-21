@@ -9,6 +9,13 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args is [var updateMode, var updateId] && updateMode is "--apply-update" or "--recover-update")
+        {
+            try { Environment.ExitCode = SetupUpdater.Run(updateId, args[0] == "--recover-update").GetAwaiter().GetResult(); }
+            catch (InvalidOperationException ex) when (ex.InnerException is IOException) { Environment.ExitCode = 1; }
+            catch (Exception ex) { SetupUpdater.RecordStartFailure(updateId); Console.Error.WriteLine("后台升级未完成（" + ex.GetType().Name + "），请检查本机维护状态。"); Environment.ExitCode = 1; }
+            return;
+        }
         if (args.Contains("--cli", StringComparer.Ordinal) || args is ["--help"])
         {
             RunCli(args); return;

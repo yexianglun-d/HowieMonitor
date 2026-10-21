@@ -62,6 +62,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_*.py'
           if ($LASTEXITCODE -ne 0) { throw 'Python tests failed.' }
       - name: Build the unsigned installer
+        id: packages
         shell: pwsh
         run: |
           $packages = @(./scripts/publish-monitor.ps1 -PublicRelease)
@@ -70,6 +71,10 @@ jobs:
           $inputDirectory = Join-Path $PWD 'artifacts/signing-input'
           New-Item -ItemType Directory -Path $inputDirectory | Out-Null
           Copy-Item -LiteralPath $setup[0].Archive -Destination (Join-Path $inputDirectory 'HowieMonitorSetup.exe')
+          $manifestDirectory = Join-Path $PWD 'artifacts/update-manifest'
+          New-Item -ItemType Directory -Path $manifestDirectory | Out-Null
+          Copy-Item -LiteralPath ($setup[0].Archive + '.release.json') -Destination (Join-Path $manifestDirectory 'HowieMonitorSetup.exe.release.json')
+          "version=$($setup[0].Verification.version)" >> $env:GITHUB_OUTPUT
           "Source revision: $env:GITHUB_SHA`nUnsigned installer: $($setup[0].Sha256)" >> $env:GITHUB_STEP_SUMMARY
       - name: Upload the exact unsigned artifact
         id: unsigned
@@ -77,6 +82,13 @@ jobs:
         with:
           name: howie-monitor-unsigned-${{ github.run_id }}
           path: artifacts/signing-input/HowieMonitorSetup.exe
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload the matching update manifest
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: howie-monitor-update-manifest-${{ github.run_id }}
+          path: artifacts/update-manifest/HowieMonitorSetup.exe.release.json
           if-no-files-found: error
           retention-days: 14
       - name: Submit the GitHub artifact for manual SignPath approval
@@ -92,12 +104,12 @@ jobs:
           wait-for-completion-timeout-in-seconds: 5400
           output-artifact-directory: artifacts/signing-output
           parameters: |
-            version: "0.1.0"
+            version: "${{ steps.packages.outputs.version }}"
       - name: Verify the returned signed installer
         if: ${{ inputs.request_signing }}
         shell: pwsh
         run: |
-          ./scripts/verify-signed-setup.ps1 -UnsignedSetup artifacts/signing-input/HowieMonitorSetup.exe -SignedSetup artifacts/signing-output/HowieMonitorSetup.exe
+          ./scripts/verify-signed-setup.ps1 -UnsignedSetup artifacts/signing-input/HowieMonitorSetup.exe -SignedSetup artifacts/signing-output/HowieMonitorSetup.exe -ReleaseManifest artifacts/update-manifest/HowieMonitorSetup.exe.release.json
       - name: Upload the verified signed artifact
         if: ${{ inputs.request_signing }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -106,5 +118,6 @@ jobs:
           path: |
             artifacts/signing-output/HowieMonitorSetup.exe
             artifacts/signing-output/HowieMonitorSetup.exe.sha256
+            artifacts/signing-output/HowieMonitorSetup.exe.release.json
           if-no-files-found: error
           retention-days: 14
