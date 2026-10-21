@@ -29,6 +29,7 @@ public sealed class SetupBootstrapScriptTests
             $work = Join-Path ([IO.Path]::GetTempPath()) ('howie-bootstrap-test-' + [Guid]::NewGuid().ToString('N'))
             $created = $false
             $ErrorActionPreference = 'Stop'
+            function Write-Host { param($Object) [Console]::WriteLine([string]$Object) }
             function Invoke-WebRequest {
                 param($Uri, $OutFile, [switch]$UseBasicParsing, $MaximumRedirection, $TimeoutSec, $ErrorAction)
                 if ($Uri -ne 'https://monitor.example/install/{{hash}}/HowieMonitorSetup.exe' -or $MaximumRedirection -ne 0) { throw 'unexpected download source' }
@@ -58,6 +59,7 @@ public sealed class SetupBootstrapScriptTests
             if (($scenario -in @('success', 'declined', 'canceled')) -and $messages.Count) { throw ($messages -join ';') }
             if (($scenario -notin @('success', 'declined', 'canceled')) -and -not $messages.Count) { throw 'failure was not reported' }
             Write-Output 'BOOTSTRAP_TEST_PASSED'
+            exit 0
             """;
         string command = prefix + "\n" + $$"""
             $source = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{Convert.ToBase64String(Encoding.UTF8.GetBytes(bootstrap))}}'))
@@ -74,6 +76,8 @@ public sealed class SetupBootstrapScriptTests
         var output = process.StandardOutput.ReadToEndAsync(deadline.Token); var error = process.StandardError.ReadToEndAsync(deadline.Token);
         try { await process.WaitForExitAsync(deadline.Token); }
         finally { if (!process.HasExited) { process.Kill(true); await process.WaitForExitAsync(); } }
-        Assert.Equal(0, process.ExitCode); Assert.Contains("BOOTSTRAP_TEST_PASSED", await output); Assert.Equal("", await error);
+        string stdout = await output, stderr = await error;
+        Assert.True(process.ExitCode == 0, $"PowerShell exited {process.ExitCode}: {stdout}\n{stderr}");
+        Assert.Contains("BOOTSTRAP_TEST_PASSED", stdout); Assert.Equal("", stderr);
     }
 }

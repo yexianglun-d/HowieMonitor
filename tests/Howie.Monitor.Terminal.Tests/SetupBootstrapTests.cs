@@ -24,7 +24,8 @@ public sealed class SetupBootstrapTests
             {
                 Assert.NotNull(stream);
                 string replacement = Path.Combine(root, "new.exe"); File.WriteAllText(replacement, "second reviewed package");
-                File.Move(replacement, path, true);
+                File.Move(path, Path.Combine(root, "previous.exe"));
+                File.Move(replacement, path);
                 using var reader = new StreamReader(stream); Assert.Equal("first reviewed package", reader.ReadToEnd());
             }
             Assert.Null(package.OpenVerified(first.Sha256!));
