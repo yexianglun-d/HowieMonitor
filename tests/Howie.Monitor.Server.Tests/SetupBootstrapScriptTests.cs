@@ -29,6 +29,7 @@ public sealed class SetupBootstrapScriptTests
             $work = Join-Path ([IO.Path]::GetTempPath()) ('howie-bootstrap-test-' + [Guid]::NewGuid().ToString('N'))
             $created = $false
             $ErrorActionPreference = 'Stop'
+            $ProgressPreference = 'SilentlyContinue'
             function Write-Host { param($Object) [Console]::WriteLine([string]$Object) }
             function Invoke-WebRequest {
                 param($Uri, $OutFile, [switch]$UseBasicParsing, $MaximumRedirection, $TimeoutSec, $ErrorAction)
@@ -70,6 +71,8 @@ public sealed class SetupBootstrapScriptTests
             """ + "\n" + suffix;
         var start = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe"))
         { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
+        // CI 从 PowerShell 7 启动测试，5.1 子进程必须使用自己的系统模块，不能继承另一版本的模块路径。
+        start.Environment["PSModulePath"] = Path.Combine(Path.GetDirectoryName(start.FileName)!, "Modules");
         foreach (string argument in new[] { "-NoProfile", "-NonInteractive", "-OutputFormat", "Text", "-EncodedCommand", Convert.ToBase64String(Encoding.Unicode.GetBytes(command)) }) start.ArgumentList.Add(argument);
         using var process = Process.Start(start)!; process.StandardInput.Close();
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
