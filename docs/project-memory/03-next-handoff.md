@@ -2,6 +2,10 @@
 
 ## 下次继续
 
+- 最新进展：用户要求“部署以及提交”，功能提交 `89c8a92` 已推送 `main`，纯 Linux 发布包已准备并上传到 `/opt/howie-monitor/staging/deploy-agent-updates-20261021/`，源提交/摘要见 current-status，生产没有切换。
+- 正在等待用户对异步问题的答复：是否允许现有 Windows 发布 workflow 的 .NET/Python/前端及安装器检查、隔离备份恢复/升级 API 和部署后只读检查。未答复前不能 dispatch workflow、运行 smoke/backup 恢复校验或实际功能检查；一般部署请求不包含此测试授权。若允许，可继续本次部署，无需重复确认部署本身。不要执行真实 Windows 升级、终端命令或通知发送。
+- GitHub HTTPS 网页域名直连超时，使用系统已配置代理 `git -c http.proxy=http://127.0.0.1:7897 ...` 同步成功；GitHub API 及 keyring 登录可用。服务器 IP/root/22 的既有密码认证可用，当前线上 `/opt/howie-monitor/releases/20261021-76c6362`，容器/镜像及 2 台电脑状态与先前记录一致。不存在新版安装器清单。准备工作中未修改生产配置、下载包或启动隔离测试。
+
 - 优先处理本轮未发布的 `0.2.0` 版本识别/受控升级：所有改动在工作区，尚未提交推送，线上没有更新。入口 `ComputersView.vue` / `AgentUpdateDialog.vue`；后台 `TelemetryUpdates.cs` / `AgentUpdateEndpoints.cs`；Windows `UpdateWorker.cs` / `SetupUpdater.cs` / `InstallEngine.cs`；协议在 Contracts `AgentUpdates.cs` / `AgentUpdateFiles.cs`。完整约定见 `docs/agent-updates.md`。
 - 本轮仅生产项目编译和前端构建通过，未运行任何测试/浏览器/API/实机功能验证，发布/签名/清单流程也未运行。新增 `AgentUpdateTests.cs`、更新 `SetupCliTests.cs` 的独立升级授权输入与断言，测试项目本轮未单独编译。**遵守用户新 AGENTS：一般实现不授权测试；发布脚本与 Windows workflow 含测试，必须取得相应授权后才可运行，不以旧会话测试授权代替。** 没有为绕过规则改掉原有测试步骤。
 - 旧 Agent 不支持自升级，需先发布新版并让用户在本地修复一次，明确选择“允许面板升级”。此后仅更高版本可从面板升级，不能拿首个 0.2.0 同版本构建互相覆盖。发布须同次 EXE + `.release.json`，签名后必须重新计算清单；缺清单时手动下载保留但远程升级不可用。当前 development 编译不能接受远程任务。
