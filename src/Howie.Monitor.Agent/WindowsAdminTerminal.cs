@@ -2,7 +2,6 @@ using System.IO.Pipes;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Security.Principal;
 using Microsoft.Win32.SafeHandles;
 using Howie.Monitor.Contracts;
 
@@ -10,7 +9,8 @@ namespace Howie.Monitor.Agent;
 
 public sealed class WindowsAdminTerminal : IAsyncDisposable
 {
-    private readonly NamedPipeServerStream _input, _output;
+    private readonly NamedPipeClientStream _input;
+    private readonly NamedPipeServerStream _output;
     private SafeFileHandle? _job;
     private SafeProcessHandle? _process;
     private Process? _managedProcess;
@@ -18,24 +18,27 @@ public sealed class WindowsAdminTerminal : IAsyncDisposable
     private int _disposed;
     public AdminTerminalIdentity Identity { get; }
 
-    private WindowsAdminTerminal(AdminTerminalIdentity identity, NamedPipeServerStream input, NamedPipeServerStream output)
+    private WindowsAdminTerminal(AdminTerminalIdentity identity, NamedPipeClientStream input, NamedPipeServerStream output)
     { Identity = identity; _input = input; _output = output; }
 
     public static async Task<WindowsAdminTerminal> Start(string userSid, int columns, int rows)
     {
         if (!TerminalProtocol.ValidSize(columns, rows)) throw new TerminalAccessException("终端尺寸不正确。");
         var identity = AdminTerminalIdentity.Acquire(userSid);
-        NamedPipeServerStream? input = null, output = null;
+        NamedPipeClientStream? input = null;
+        NamedPipeServerStream? output = null;
         WindowsAdminTerminal? terminal = null;
         try
         {
             // ConPTY 侧使用同步句柄，主机侧使用可取消的异步管道，断线时仍能排空最后一帧。
             string inputName = "howie-terminal-" + Guid.NewGuid().ToString("N"), outputName = "howie-terminal-" + Guid.NewGuid().ToString("N");
-            input = Pipe(inputName, PipeDirection.Out); output = Pipe(outputName, PipeDirection.In);
-            using var inputClient = Connect(inputName, input, PipeDirection.In);
+            using var inputReader = new NamedPipeServerStream(inputName, PipeDirection.In, 1,
+                PipeTransmissionMode.Byte, PipeOptions.CurrentUserOnly, 65536, 65536);
+            input = Connect(inputName, inputReader, PipeDirection.Out, PipeOptions.Asynchronous);
+            output = Pipe(outputName, PipeDirection.In);
             using var outputClient = Connect(outputName, output, PipeDirection.Out);
             terminal = new(identity, input, output);
-            int result = Native.CreatePseudoConsole(new((short)columns, (short)rows), inputClient.SafePipeHandle, outputClient.SafePipeHandle, 0, out terminal._console);
+            int result = Native.CreatePseudoConsole(new((short)columns, (short)rows), inputReader.SafePipeHandle, outputClient.SafePipeHandle, 0, out terminal._console);
             if (result < 0) Marshal.ThrowExceptionForHR(result);
             terminal.StartProcess();
             return terminal;
@@ -49,10 +52,10 @@ public sealed class WindowsAdminTerminal : IAsyncDisposable
     }
     private static NamedPipeServerStream Pipe(string name, PipeDirection direction) => new(name, direction, 1,
         PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly, 65536, 65536);
-    private static NamedPipeClientStream Connect(string name, NamedPipeServerStream server, PipeDirection direction)
+    private static NamedPipeClientStream Connect(string name, NamedPipeServerStream server, PipeDirection direction, PipeOptions options = PipeOptions.None)
     {
         var connection = server.WaitForConnectionAsync();
-        var client = new NamedPipeClientStream(".", name, direction, PipeOptions.None);
+        var client = new NamedPipeClientStream(".", name, direction, options);
         try { client.Connect(5000); connection.GetAwaiter().GetResult(); return client; }
         catch { client.Dispose(); throw; }
     }
@@ -82,17 +85,8 @@ public sealed class WindowsAdminTerminal : IAsyncDisposable
             if (!File.Exists(shell)) throw new TerminalAccessException("系统 PowerShell 不可用。");
             var startup = new StartupInfoEx { Info = new() { Size = (uint)Marshal.SizeOf<StartupInfoEx>(), Desktop = desktop }, Attributes = attributes };
             // 先以挂起状态创建，验证真实身份并纳入进程组后才允许运行任何命令。
-            using var current = WindowsIdentity.GetCurrent();
-            bool sameUser = !current.IsSystem && current.User?.Value == Identity.UserSid
-                && Process.GetCurrentProcess().SessionId == Identity.SessionId && AdminTerminalIdentity.Elevated(current.AccessToken);
-            var command = new StringBuilder("\"" + shell + "\" -NoLogo -NoProfile");
-            ProcessInfo process;
-            bool created = sameUser
-                ? Native.CreateProcess(shell, command, IntPtr.Zero, IntPtr.Zero, false,
-                    0x00080000 | 0x00000400 | 0x00000004, environment, profile.ToString(), ref startup, out process)
-                : Native.CreateProcessAsUser(Identity.Token, shell, command, IntPtr.Zero, IntPtr.Zero, false,
-                    0x00080000 | 0x00000400 | 0x00000004, environment, profile.ToString(), ref startup, out process);
-            if (!created)
+            if (!Native.CreateProcessAsUser(Identity.Token, shell, new StringBuilder("\"" + shell + "\" -NoLogo -NoProfile"),
+                IntPtr.Zero, IntPtr.Zero, false, 0x00080000 | 0x00000400 | 0x00000004, environment, profile.ToString(), ref startup, out var process))
                 throw Error("无法启动管理员 PowerShell");
             _process = new(process.Process, true);
             using var thread = new SafeFileHandle(process.Thread, true);
@@ -100,8 +94,8 @@ public sealed class WindowsAdminTerminal : IAsyncDisposable
             {
                 if (!Native.AssignProcessToJobObject(_job, _process)) throw Error("无法绑定终端进程组");
                 AdminTerminalIdentity.VerifyProcess(_process.DangerousGetHandle(), Identity);
-                using (var observed = AdminTerminalIdentity.Acquire(Identity.UserSid))
-                    if (observed.LogonId != Identity.LogonId) throw new TerminalAccessException("管理员登录会话已变更。");
+                using (var current = AdminTerminalIdentity.Acquire(Identity.UserSid))
+                    if (current.LogonId != Identity.LogonId) throw new TerminalAccessException("管理员登录会话已变更。");
                 _managedProcess = Process.GetProcessById((int)process.ProcessId);
                 _ = _managedProcess.Handle;
                 if (Native.ResumeThread(thread) == uint.MaxValue) throw Error("无法启动终端线程");
@@ -181,7 +175,6 @@ public sealed class WindowsAdminTerminal : IAsyncDisposable
         [DllImport("userenv.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool DestroyEnvironmentBlock(IntPtr environment);
         [DllImport("userenv.dll", EntryPoint = "GetUserProfileDirectoryW", CharSet = CharSet.Unicode, SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool GetUserProfileDirectory(SafeAccessTokenHandle token, StringBuilder? directory, ref uint size);
         [DllImport("advapi32.dll", EntryPoint = "CreateProcessAsUserW", CharSet = CharSet.Unicode, SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool CreateProcessAsUser(SafeAccessTokenHandle token, string application, StringBuilder command, IntPtr processAttributes, IntPtr threadAttributes, [MarshalAs(UnmanagedType.Bool)] bool inherit, uint flags, IntPtr environment, string directory, ref StartupInfoEx startup, out ProcessInfo process);
-        [DllImport("kernel32.dll", EntryPoint = "CreateProcessW", CharSet = CharSet.Unicode, SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool CreateProcess(string application, StringBuilder command, IntPtr processAttributes, IntPtr threadAttributes, [MarshalAs(UnmanagedType.Bool)] bool inherit, uint flags, IntPtr environment, string directory, ref StartupInfoEx startup, out ProcessInfo process);
         [DllImport("kernel32.dll", SetLastError = true)] internal static extern uint ResumeThread(SafeFileHandle thread);
         [DllImport("kernel32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool TerminateProcess(SafeProcessHandle process, uint exitCode);
     }
