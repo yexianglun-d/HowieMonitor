@@ -78,7 +78,9 @@ public sealed class AdminTerminalIdentity : IDisposable
     public static bool Elevated(SafeAccessTokenHandle token) => Information<int>(token, 20) != 0;
     public static void VerifyProcess(IntPtr process, AdminTerminalIdentity expected)
     {
-        if (!Native.OpenProcessToken(process, 8, out var token)) throw Error("无法验证终端执行身份");
+        // IsInRole 会把进程主令牌复制为模拟令牌；仅有 Query 会在校验合法管理员时拒绝访问。
+        uint access = (uint)(TokenAccessLevels.Query | TokenAccessLevels.Duplicate);
+        if (!Native.OpenProcessToken(process, access, out var token)) throw Error("无法验证终端执行身份");
         using (token)
         using (var actual = new WindowsIdentity(token.DangerousGetHandle()))
         {
