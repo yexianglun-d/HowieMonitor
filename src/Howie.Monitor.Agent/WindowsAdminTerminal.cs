@@ -9,8 +9,8 @@ namespace Howie.Monitor.Agent;
 
 public sealed class WindowsAdminTerminal : IAsyncDisposable
 {
-    private readonly NamedPipeClientStream _input;
-    private readonly NamedPipeServerStream _output;
+    private readonly NamedPipeClientStream _input, _output;
+    private readonly NamedPipeServerStream _inputServer, _outputServer;
     private SafeFileHandle? _job;
     private SafeProcessHandle? _process;
     private Process? _managedProcess;
@@ -18,27 +18,26 @@ public sealed class WindowsAdminTerminal : IAsyncDisposable
     private int _disposed;
     public AdminTerminalIdentity Identity { get; }
 
-    private WindowsAdminTerminal(AdminTerminalIdentity identity, NamedPipeClientStream input, NamedPipeServerStream output)
-    { Identity = identity; _input = input; _output = output; }
+    private WindowsAdminTerminal(AdminTerminalIdentity identity, NamedPipeClientStream input, NamedPipeClientStream output,
+        NamedPipeServerStream inputServer, NamedPipeServerStream outputServer)
+    { Identity = identity; _input = input; _output = output; _inputServer = inputServer; _outputServer = outputServer; }
 
     public static async Task<WindowsAdminTerminal> Start(string userSid, int columns, int rows)
     {
         if (!TerminalProtocol.ValidSize(columns, rows)) throw new TerminalAccessException("终端尺寸不正确。");
         var identity = AdminTerminalIdentity.Acquire(userSid);
-        NamedPipeClientStream? input = null;
-        NamedPipeServerStream? output = null;
+        NamedPipeClientStream? input = null, output = null;
+        NamedPipeServerStream? inputServer = null, outputServer = null;
         WindowsAdminTerminal? terminal = null;
         try
         {
             // ConPTY 侧使用同步句柄，主机侧使用可取消的异步管道，断线时仍能排空最后一帧。
             string inputName = "howie-terminal-" + Guid.NewGuid().ToString("N"), outputName = "howie-terminal-" + Guid.NewGuid().ToString("N");
-            using var inputReader = new NamedPipeServerStream(inputName, PipeDirection.In, 1,
-                PipeTransmissionMode.Byte, PipeOptions.CurrentUserOnly, 65536, 65536);
-            input = Connect(inputName, inputReader, PipeDirection.Out, PipeOptions.Asynchronous);
-            output = Pipe(outputName, PipeDirection.In);
-            using var outputClient = Connect(outputName, output, PipeDirection.Out);
-            terminal = new(identity, input, output);
-            int result = Native.CreatePseudoConsole(new((short)columns, (short)rows), inputReader.SafePipeHandle, outputClient.SafePipeHandle, 0, out terminal._console);
+            inputServer = Pipe(inputName); outputServer = Pipe(outputName);
+            input = Connect(inputName, inputServer, PipeDirection.Out);
+            output = Connect(outputName, outputServer, PipeDirection.In);
+            terminal = new(identity, input, output, inputServer, outputServer);
+            int result = Native.CreatePseudoConsole(new((short)columns, (short)rows), inputServer.SafePipeHandle, outputServer.SafePipeHandle, 0, out terminal._console);
             if (result < 0) Marshal.ThrowExceptionForHR(result);
             terminal.StartProcess();
             return terminal;
@@ -46,16 +45,16 @@ public sealed class WindowsAdminTerminal : IAsyncDisposable
         catch
         {
             if (terminal is not null) await terminal.DisposeAsync();
-            else { input?.Dispose(); output?.Dispose(); identity.Dispose(); }
+            else { input?.Dispose(); output?.Dispose(); inputServer?.Dispose(); outputServer?.Dispose(); identity.Dispose(); }
             throw;
         }
     }
-    private static NamedPipeServerStream Pipe(string name, PipeDirection direction) => new(name, direction, 1,
-        PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly, 65536, 65536);
-    private static NamedPipeClientStream Connect(string name, NamedPipeServerStream server, PipeDirection direction, PipeOptions options = PipeOptions.None)
+    private static NamedPipeServerStream Pipe(string name) => new(name, PipeDirection.InOut, 1,
+        PipeTransmissionMode.Byte, PipeOptions.CurrentUserOnly, 65536, 65536);
+    private static NamedPipeClientStream Connect(string name, NamedPipeServerStream server, PipeDirection direction)
     {
         var connection = server.WaitForConnectionAsync();
-        var client = new NamedPipeClientStream(".", name, direction, options);
+        var client = new NamedPipeClientStream(".", name, direction, PipeOptions.Asynchronous);
         try { client.Connect(5000); connection.GetAwaiter().GetResult(); return client; }
         catch { client.Dispose(); throw; }
     }
@@ -135,10 +134,11 @@ public sealed class WindowsAdminTerminal : IAsyncDisposable
                 var drain = Drain();
                 await Task.Run(() => Native.ClosePseudoConsole(_console));
                 _console = IntPtr.Zero;
+                _inputServer.Dispose(); _outputServer.Dispose();
                 await drain;
             }
         }
-        finally { _input.Dispose(); _output.Dispose(); _managedProcess?.Dispose(); _process?.Dispose(); Identity.Dispose(); }
+        finally { _input.Dispose(); _output.Dispose(); _inputServer.Dispose(); _outputServer.Dispose(); _managedProcess?.Dispose(); _process?.Dispose(); Identity.Dispose(); }
     }
     private static TerminalAccessException Error(string operation) => new(operation + $"（错误码 {Marshal.GetLastWin32Error()}）。");
 
