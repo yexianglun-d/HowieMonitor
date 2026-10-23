@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Security.Principal;
 using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using Howie.Monitor.Agent;
 using Xunit;
 
@@ -25,12 +27,33 @@ public sealed class NativeTerminalTests
         async Task Until(string expected)
         {
             var received = new StringBuilder();
+            int repliedThrough = 0;
             while (!received.ToString().Contains(expected, StringComparison.Ordinal))
             {
-                int count = await terminal.Read(buffer, token);
+                int count;
+                try { count = await terminal.Read(buffer, token); }
+                catch (OperationCanceledException)
+                {
+                    throw new TimeoutException("等待终端输出 " + expected + " 超时，已收到：" + JsonSerializer.Serialize(received.ToString()));
+                }
                 Assert.True(count > 0, "原生终端输出管道提前结束：" + received);
                 received.Append(characters, 0, decoder.GetChars(buffer, 0, count, characters, 0));
                 Assert.True(received.Length < 65536, "未收到预期终端输出。");
+                // 与浏览器终端一样回应能力与光标查询，不能让 PSReadLine 等待不存在的渲染端。
+                foreach (Match query in Regex.Matches(received.ToString(), "\u001b\\[(?:\\??[56]n|[>0]?c)"))
+                {
+                    if (query.Index < repliedThrough) continue;
+                    string response = query.Value switch
+                    {
+                        "\u001b[5n" => "\u001b[0n",
+                        "\u001b[6n" => "\u001b[1;1R",
+                        "\u001b[?6n" => "\u001b[?1;1R",
+                        "\u001b[>c" => "\u001b[>0;0;0c",
+                        _ => "\u001b[?1;2c"
+                    };
+                    await terminal.Write(response, token);
+                    repliedThrough = query.Index + query.Length;
+                }
             }
         }
         await Until("PS ");
