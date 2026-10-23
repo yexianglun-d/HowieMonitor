@@ -108,6 +108,7 @@ public sealed class WindowsAdminTerminal : IAsyncDisposable
     public ValueTask<int> Read(Memory<byte> buffer, CancellationToken token) => _output.ReadAsync(buffer, token);
     public ValueTask Write(string value, CancellationToken token) => _input.WriteAsync(Encoding.UTF8.GetBytes(value), token);
     public Task WaitForExit(CancellationToken token) => _managedProcess!.WaitForExitAsync(token);
+    public int ExitCode => _managedProcess!.ExitCode;
     public void Resize(int columns, int rows)
     {
         int result = Native.ResizePseudoConsole(_console, new((short)columns, (short)rows));

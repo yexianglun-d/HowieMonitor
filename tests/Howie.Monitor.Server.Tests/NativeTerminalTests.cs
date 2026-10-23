@@ -21,17 +21,30 @@ public sealed class NativeTerminalTests
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         var token = deadline.Token;
         await using var terminal = await WindowsAdminTerminal.Start(identity.User!.Value, 80, 24);
+        var exited = terminal.WaitForExit(token);
         var buffer = new byte[4096];
         var characters = new char[4096];
         var decoder = Encoding.UTF8.GetDecoder();
         async Task Until(string expected)
         {
+            using var reading = CancellationTokenSource.CreateLinkedTokenSource(token);
             var received = new StringBuilder();
             int repliedThrough = 0;
             while (!received.ToString().Contains(expected, StringComparison.Ordinal))
             {
                 int count;
-                try { count = await terminal.Read(buffer, token); }
+                try
+                {
+                    var read = terminal.Read(buffer, reading.Token).AsTask();
+                    await Task.WhenAny(read, exited);
+                    if (exited.IsCompleted)
+                    {
+                        await reading.CancelAsync();
+                        try { await read; } catch (OperationCanceledException) { }
+                        throw new InvalidOperationException($"PowerShell 提前退出：0x{terminal.ExitCode:X8}，输出：" + JsonSerializer.Serialize(received.ToString()));
+                    }
+                    count = await read;
+                }
                 catch (OperationCanceledException)
                 {
                     throw new TimeoutException("等待终端输出 " + expected + " 超时，已收到：" + JsonSerializer.Serialize(received.ToString()));
@@ -57,7 +70,6 @@ public sealed class NativeTerminalTests
             }
         }
         await Until("PS ");
-        var exited = terminal.WaitForExit(token);
         Assert.False(exited.IsCompleted, "PowerShell 在连接后即退出。");
         terminal.Resize(120, 30);
         string nonce = Guid.NewGuid().ToString("N");
