@@ -10,6 +10,7 @@ namespace Howie.Monitor.Agent;
 public sealed class WindowsAdminTerminal : IAsyncDisposable
 {
     private readonly NamedPipeServerStream _input, _output;
+    private NamedPipeClientStream? _inputClient, _outputClient;
     private SafeFileHandle? _job;
     private SafeProcessHandle? _process;
     private Process? _managedProcess;
@@ -25,15 +26,16 @@ public sealed class WindowsAdminTerminal : IAsyncDisposable
         if (!TerminalProtocol.ValidSize(columns, rows)) throw new TerminalAccessException("终端尺寸不正确。");
         var identity = AdminTerminalIdentity.Acquire(userSid);
         NamedPipeServerStream? input = null, output = null;
+        NamedPipeClientStream? inputClient = null, outputClient = null;
         WindowsAdminTerminal? terminal = null;
         try
         {
             // ConPTY 侧使用同步句柄，主机侧使用可取消的异步管道，断线时仍能排空最后一帧。
             string inputName = "howie-terminal-" + Guid.NewGuid().ToString("N"), outputName = "howie-terminal-" + Guid.NewGuid().ToString("N");
             input = Pipe(inputName, PipeDirection.Out); output = Pipe(outputName, PipeDirection.In);
-            using var inputClient = Connect(inputName, input, PipeDirection.In);
-            using var outputClient = Connect(outputName, output, PipeDirection.Out);
-            terminal = new(identity, input, output);
+            inputClient = Connect(inputName, input, PipeDirection.In);
+            outputClient = Connect(outputName, output, PipeDirection.Out);
+            terminal = new(identity, input, output) { _inputClient = inputClient, _outputClient = outputClient };
             int result = Native.CreatePseudoConsole(new((short)columns, (short)rows), inputClient.SafePipeHandle, outputClient.SafePipeHandle, 0, out terminal._console);
             if (result < 0) Marshal.ThrowExceptionForHR(result);
             terminal.StartProcess();
@@ -42,7 +44,7 @@ public sealed class WindowsAdminTerminal : IAsyncDisposable
         catch
         {
             if (terminal is not null) await terminal.DisposeAsync();
-            else { input?.Dispose(); output?.Dispose(); identity.Dispose(); }
+            else { inputClient?.Dispose(); outputClient?.Dispose(); input?.Dispose(); output?.Dispose(); identity.Dispose(); }
             throw;
         }
     }
@@ -80,8 +82,8 @@ public sealed class WindowsAdminTerminal : IAsyncDisposable
             string shell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe");
             if (!File.Exists(shell)) throw new TerminalAccessException("系统 PowerShell 不可用。");
             var startup = new StartupInfoEx { Info = new() { Size = (uint)Marshal.SizeOf<StartupInfoEx>(), Desktop = desktop }, Attributes = attributes };
-            // 保持交互输入循环；先挂起创建，验证真实身份并纳入进程组后才允许运行命令。
-            if (!Native.CreateProcessAsUser(Identity.Token, shell, new StringBuilder("\"" + shell + "\" -NoLogo -NoProfile -NoExit"),
+            // 先以挂起状态创建，验证真实身份并纳入进程组后才允许运行任何命令。
+            if (!Native.CreateProcessAsUser(Identity.Token, shell, new StringBuilder("\"" + shell + "\" -NoLogo -NoProfile"),
                 IntPtr.Zero, IntPtr.Zero, false, 0x00080000 | 0x00000400 | 0x00000004, environment, profile.ToString(), ref startup, out var process))
                 throw Error("无法启动管理员 PowerShell");
             _process = new(process.Process, true);
@@ -120,6 +122,7 @@ public sealed class WindowsAdminTerminal : IAsyncDisposable
         _job?.Dispose();
         try
         {
+            _inputClient?.Dispose(); _outputClient?.Dispose();
             if (_console != IntPtr.Zero)
             {
                 async Task Drain()
