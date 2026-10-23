@@ -80,8 +80,8 @@ public sealed class WindowsAdminTerminal : IAsyncDisposable
             string shell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe");
             if (!File.Exists(shell)) throw new TerminalAccessException("系统 PowerShell 不可用。");
             var startup = new StartupInfoEx { Info = new() { Size = (uint)Marshal.SizeOf<StartupInfoEx>(), Desktop = desktop }, Attributes = attributes };
-            // 先以挂起状态创建，验证真实身份并纳入进程组后才允许运行任何命令。
-            if (!Native.CreateProcessAsUser(Identity.Token, shell, new StringBuilder("\"" + shell + "\" -NoLogo -NoProfile"),
+            // 保持交互输入循环；先挂起创建，验证真实身份并纳入进程组后才允许运行命令。
+            if (!Native.CreateProcessAsUser(Identity.Token, shell, new StringBuilder("\"" + shell + "\" -NoLogo -NoProfile -NoExit"),
                 IntPtr.Zero, IntPtr.Zero, false, 0x00080000 | 0x00000400 | 0x00000004, environment, profile.ToString(), ref startup, out var process))
                 throw Error("无法启动管理员 PowerShell");
             _process = new(process.Process, true);
