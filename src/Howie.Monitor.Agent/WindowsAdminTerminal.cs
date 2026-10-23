@@ -9,8 +9,7 @@ namespace Howie.Monitor.Agent;
 
 public sealed class WindowsAdminTerminal : IAsyncDisposable
 {
-    private readonly NamedPipeClientStream _input, _output;
-    private readonly NamedPipeServerStream _inputServer, _outputServer;
+    private readonly NamedPipeServerStream _input, _output;
     private SafeFileHandle? _job;
     private SafeProcessHandle? _process;
     private Process? _managedProcess;
@@ -18,26 +17,24 @@ public sealed class WindowsAdminTerminal : IAsyncDisposable
     private int _disposed;
     public AdminTerminalIdentity Identity { get; }
 
-    private WindowsAdminTerminal(AdminTerminalIdentity identity, NamedPipeClientStream input, NamedPipeClientStream output,
-        NamedPipeServerStream inputServer, NamedPipeServerStream outputServer)
-    { Identity = identity; _input = input; _output = output; _inputServer = inputServer; _outputServer = outputServer; }
+    private WindowsAdminTerminal(AdminTerminalIdentity identity, NamedPipeServerStream input, NamedPipeServerStream output)
+    { Identity = identity; _input = input; _output = output; }
 
     public static async Task<WindowsAdminTerminal> Start(string userSid, int columns, int rows)
     {
         if (!TerminalProtocol.ValidSize(columns, rows)) throw new TerminalAccessException("终端尺寸不正确。");
         var identity = AdminTerminalIdentity.Acquire(userSid);
-        NamedPipeClientStream? input = null, output = null;
-        NamedPipeServerStream? inputServer = null, outputServer = null;
+        NamedPipeServerStream? input = null, output = null;
         WindowsAdminTerminal? terminal = null;
         try
         {
             // ConPTY 侧使用同步句柄，主机侧使用可取消的异步管道，断线时仍能排空最后一帧。
             string inputName = "howie-terminal-" + Guid.NewGuid().ToString("N"), outputName = "howie-terminal-" + Guid.NewGuid().ToString("N");
-            inputServer = Pipe(inputName); outputServer = Pipe(outputName);
-            input = Connect(inputName, inputServer, PipeDirection.Out);
-            output = Connect(outputName, outputServer, PipeDirection.In);
-            terminal = new(identity, input, output, inputServer, outputServer);
-            int result = Native.CreatePseudoConsole(new((short)columns, (short)rows), inputServer.SafePipeHandle, outputServer.SafePipeHandle, 0, out terminal._console);
+            input = Pipe(inputName, PipeDirection.Out); output = Pipe(outputName, PipeDirection.In);
+            using var inputClient = Connect(inputName, input, PipeDirection.In);
+            using var outputClient = Connect(outputName, output, PipeDirection.Out);
+            terminal = new(identity, input, output);
+            int result = Native.CreatePseudoConsole(new((short)columns, (short)rows), inputClient.SafePipeHandle, outputClient.SafePipeHandle, 0, out terminal._console);
             if (result < 0) Marshal.ThrowExceptionForHR(result);
             terminal.StartProcess();
             return terminal;
@@ -45,16 +42,16 @@ public sealed class WindowsAdminTerminal : IAsyncDisposable
         catch
         {
             if (terminal is not null) await terminal.DisposeAsync();
-            else { input?.Dispose(); output?.Dispose(); inputServer?.Dispose(); outputServer?.Dispose(); identity.Dispose(); }
+            else { input?.Dispose(); output?.Dispose(); identity.Dispose(); }
             throw;
         }
     }
-    private static NamedPipeServerStream Pipe(string name) => new(name, PipeDirection.InOut, 1,
-        PipeTransmissionMode.Byte, PipeOptions.CurrentUserOnly, 65536, 65536);
+    private static NamedPipeServerStream Pipe(string name, PipeDirection direction) => new(name, direction, 1,
+        PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly, 65536, 65536);
     private static NamedPipeClientStream Connect(string name, NamedPipeServerStream server, PipeDirection direction)
     {
         var connection = server.WaitForConnectionAsync();
-        var client = new NamedPipeClientStream(".", name, direction, PipeOptions.Asynchronous);
+        var client = new NamedPipeClientStream(".", name, direction, PipeOptions.None);
         try { client.Connect(5000); connection.GetAwaiter().GetResult(); return client; }
         catch { client.Dispose(); throw; }
     }
@@ -82,7 +79,8 @@ public sealed class WindowsAdminTerminal : IAsyncDisposable
             if (!Native.GetUserProfileDirectory(Identity.Token, profile, ref length)) throw Error("无法读取管理员用户目录");
             string shell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe");
             if (!File.Exists(shell)) throw new TerminalAccessException("系统 PowerShell 不可用。");
-            var startup = new StartupInfoEx { Info = new() { Size = (uint)Marshal.SizeOf<StartupInfoEx>(), Desktop = desktop }, Attributes = attributes };
+            // 显式清空标准句柄，避免 Windows 把服务或父进程的重定向管道复制给 PowerShell，绕过 ConPTY。
+            var startup = new StartupInfoEx { Info = new() { Size = (uint)Marshal.SizeOf<StartupInfoEx>(), Desktop = desktop, Flags = 0x00000100 }, Attributes = attributes };
             // 先以挂起状态创建，验证真实身份并纳入进程组后才允许运行任何命令。
             if (!Native.CreateProcessAsUser(Identity.Token, shell, new StringBuilder("\"" + shell + "\" -NoLogo -NoProfile"),
                 IntPtr.Zero, IntPtr.Zero, false, 0x00080000 | 0x00000400 | 0x00000004, environment, profile.ToString(), ref startup, out var process))
@@ -134,11 +132,10 @@ public sealed class WindowsAdminTerminal : IAsyncDisposable
                 var drain = Drain();
                 await Task.Run(() => Native.ClosePseudoConsole(_console));
                 _console = IntPtr.Zero;
-                _inputServer.Dispose(); _outputServer.Dispose();
                 await drain;
             }
         }
-        finally { _input.Dispose(); _output.Dispose(); _inputServer.Dispose(); _outputServer.Dispose(); _managedProcess?.Dispose(); _process?.Dispose(); Identity.Dispose(); }
+        finally { _input.Dispose(); _output.Dispose(); _managedProcess?.Dispose(); _process?.Dispose(); Identity.Dispose(); }
     }
     private static TerminalAccessException Error(string operation) => new(operation + $"（错误码 {Marshal.GetLastWin32Error()}）。");
 
