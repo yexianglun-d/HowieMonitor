@@ -37,7 +37,7 @@ public sealed class NativeTerminalTests
                 {
                     var read = terminal.Read(buffer, reading.Token).AsTask();
                     await Task.WhenAny(read, exited);
-                    if (exited.IsCompleted)
+                    if (exited.IsCompletedSuccessfully)
                     {
                         await reading.CancelAsync();
                         try { await read; } catch (OperationCanceledException) { }
