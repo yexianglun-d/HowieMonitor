@@ -1,6 +1,6 @@
 # Current Status
 
-更新日期：2026-10-22
+更新日期：2026-10-23
 
 ## 项目一句话
 
@@ -8,12 +8,14 @@ Howie Monitor 是个人使用的 Windows 11 多电脑性能监控工具：采集
 
 ## 当前状态
 
-- 2026-10-21 23:58（北京时间），卸载清理修复 `0.2.1` 已部署到 `https://monitor.howied.me/`；应用和 Windows 安装包统一来自 `7dc832fa10903545480db3e7f58cd1f8b71d3631`，代码已推送 main。当前目录 `/opt/howie-monitor/releases/20261021-7dc832f`，上一目录 `20261021-b301a0c` 保留；项目日志的后续提交不代表重新构建应用。
+- 2026-10-23 19:18（北京时间），终端启动修复 Windows `0.2.2` 已更新至面板与 CLI 下载，安装包来源 `db77bf2da7ca486211b1e674a20900161263d5ee` 已推送 main。仅替换 EXE 与匹配 `.release.json`，Linux 应用仍为 `7dc832fa10903545480db3e7f58cd1f8b71d3631` / 0.2.1，current 仍为 `/opt/howie-monitor/releases/20261021-7dc832f`，没有重启服务。项目日志的后续提交不代表另一份安装包。
+- 最终完整 Windows Actions `39944213989` 成功：265 项 .NET（34 Collector / 201 Server / 30 Terminal）、20 项 Python，既有前端测试/构建、发布包及 CLI 帮助检查通过；新增原生 PowerShell 提示符/命令执行输出/resize/exit 在专用及完整流程均通过。Windows 安装包 94,022,272 字节，SHA-256 `037ef2dfbc39b1e9a96fd5acdc91bb0675a6da33c41cd0369b3cfe1a87748670`，未签名。旧 0.2.1 EXE 与清单成对保留在 `/opt/howie-monitor/staging/terminal-startup-20261023-db77bf2/pre-switch/`；配置、密钥和 Nginx 摘要不变。实际 GAMES 安装/连接仍待用户修复升级后确认，不把当前登录 runner 的原生测试当成 SYSTEM 服务跨会话或目标电脑验收。
+- 2026-10-23 19:25（北京时间）公网复核通过：5 项页面资源摘要、4 项只读未登录鉴权、install.ps1 的新摘要/大小和完整 EXE 下载 SHA-256 均一致；现有电脑 2 台，生产升级任务 0。没有自动升级真实电脑或执行终端命令。CLI 检测到已有安装会修复/升级并保留电脑身份，当前账号的终端授权仍由用户确认。
 - 已证明旧问题：卸载器运行于安装目录，给自身与目录排入 Windows 重启删除后写入 `uninstall-pending.json`，下次安装直接拦截。新版先在固定 ProgramData 目录启动独立卸载副本，等待原进程退出再清产品文件，退出后清理临时副本；默认完整移除本地配置、凭据、队列和升级缓存，取消该选项则连同升级恢复记录一起保留。云端电脑和历史不随本机卸载删除。
 - 旧标记恢复先验证产品归属、管理员权限、服务已删除及文件确实可清理，再用注册表事务仅撤销本产品的旧延迟删除操作；锁文件、未知归属、链接越界或事务失败仍保留可重试状态，不删除标记绕过。用户手动删标记后留下的旧删除任务也在安装前按相同边界处理。仍被其他进程占用的文件可能需要关闭进程或重启，不能保证所有情况免重启。
-- 用户已明确允许本轮 Windows 发布工作流、临时目录卸载/旧标记恢复/终端管道和发布检查。最终 Actions `39628656417` 完整成功：264 项 .NET（34 Collector / 200 Server / 30 Terminal）、20 项 Python、既有前端测试/构建及发布包/CLI 帮助检查。新增 15 项卸载相关用例在 Windows 临时目录运行，覆盖默认完整删除/保留恢复记录、锁文件重试、归属/链接、原始注册表多字符串、隔离 HKCU 事务、SYSTEM 删除队列只读兼容及独立副本退出清理；没有卸载或执行命令到真实电脑。
-- 新 EXE 94,022,265 字节，SHA-256 `3e2c18ee2cc1c2caca7f12e578cf3396626c394d5f2cd65a5ba7bb9e2e3d25e0`，未签名，配套 `.release.json` 同步发布。435 个 Linux 文件、无外网合成协议/删除/升级/终端/重启检查、公网 5 项资源摘要、8 项未登录鉴权、安装脚本与完整 EXE 摘要通过。服务端无功能或数据库结构变化，本轮未做真实备份副本启动迁移；新备份 `/opt/howie-monitor/backups/monitor-20261021-155246.tar.gz` 已完成文件与 SQLite 恢复校验，SHA-256 `40d69c95b9584d18b44b2ea0d3b8c79c6c147aa092e873c4fb501a94aa7bb0bc`。备份停服 20.93 秒，切换 6.2 秒；现有两台电脑、凭据、通知、密码和密钥保留，Nginx 未改；生产升级任务/待移除均 0。
-- 终端问题未结案：用户反馈“电脑离线或采集端未连接”。2026-10-22 00:09（北京时间）只读检查显示 GAMES 仍运行 `0.2.0` / `b301a0c`，采样距检查 2.2 秒，最近 5 分钟 111 条终端 poll 返回 200；这不证明 capability available 或实际管理员 PowerShell 启动。当前 GAMES ID `device-ce165c17084842b79f49698e097e873f` 与旧页面 ID 不同，等待用户确认选中的电脑和刷新后原文，不能直接认定选错电脑。未自动开启终端/升级授权、未发送通知、未运行真实终端命令或实机卸载。证据 `.local/uninstall-cleanup-20261021/`，私有数据只在服务器；隔离容器和恢复/合成数据已清理。
+- 卸载修复发布记录（0.2.1）：用户已明确允许本轮 Windows 发布工作流、临时目录卸载/旧标记恢复/终端管道和发布检查。Actions `39628656417` 完整成功：264 项 .NET（34 Collector / 200 Server / 30 Terminal）、20 项 Python、既有前端测试/构建及发布包/CLI 帮助检查。新增 15 项卸载相关用例在 Windows 临时目录运行，覆盖默认完整删除/保留恢复记录、锁文件重试、归属/链接、原始注册表多字符串、隔离 HKCU 事务、SYSTEM 删除队列只读兼容及独立副本退出清理；没有卸载或执行命令到真实电脑。
+- 0.2.1 原 EXE 94,022,265 字节，SHA-256 `3e2c18ee2cc1c2caca7f12e578cf3396626c394d5f2cd65a5ba7bb9e2e3d25e0`，未签名，配套 `.release.json` 同步发布。435 个 Linux 文件、无外网合成协议/删除/升级/终端/重启检查、公网 5 项资源摘要、8 项未登录鉴权、安装脚本与完整 EXE 摘要通过。服务端无功能或数据库结构变化，该轮未做真实备份副本启动迁移；备份 `/opt/howie-monitor/backups/monitor-20261021-155246.tar.gz` 已完成文件与 SQLite 恢复校验，SHA-256 `40d69c95b9584d18b44b2ea0d3b8c79c6c147aa092e873c4fb501a94aa7bb0bc`。备份停服 20.93 秒，切换 6.2 秒；现有两台电脑、凭据、通知、密码和密钥保留，Nginx 未改；生产升级任务/待移除均 0。
+- 终端排查证据（2026-10-23）：用户截图确认当前 GAMES / GAMES\Administrator，提示“目标电脑终端已断开”；2026-10-22 09:30（北京时间）的已有日志显示密码校验、双端 WebSocket 101 成功，目标端约 32.8ms 断开，普通心跳继续。隔天近 4 小时限定警告查询无输出不能排除更早异常。原生 Windows 用例首先在 45ms 复现 VerifyProcess → IsInRole AccessDenied，修复 TOKEN_QUERY 缺 TOKEN_DUPLICATE；随后发现提示符泄漏到父进程 stdout，按微软 [Terminal discussion 15814](https://github.com/microsoft/terminal/discussions/15814) / [node-pty](https://github.com/microsoft/node-pty/blob/main/src/win/conpty.cc) 的实现显式设置 STARTF_USESTDHANDLES 并保持三个句柄为空，让 PowerShell 连接 ConPTY。保留 SID/登录会话/管理员/非 SYSTEM 校验，所有无效 NoExit、管道改造及 API 切换实验均撤回。源码 `db77bf2da7ca486211b1e674a20900161263d5ee` 的隔离原生检查 Actions `39943987989` 和完整发布 `39944213989` 均通过；0.2.2 已发布。该用例是 runner 当前已登录提升账号，不代表 SYSTEM 服务跨会话或 GAMES 实机验收；未升级真实电脑、开启授权、发送通知或执行真实终端命令。
 
 ## 0.2.0 发布时记录（已被当前版本替代）
 
